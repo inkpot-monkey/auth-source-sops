@@ -87,9 +87,11 @@ HOST, USER, PORT, REQUIRE, and MAX."
           :user (or entry-user user)
           :port (or entry-port port)
           :secret (lambda ()
-                    (let ((sops-output (auth-source-sops-decrypt))
-                          (sops-data (auth-source-sops-parse auth-source-sops-file sops-output)))
-                      (format "%s" (alist-get entry-secret-key sops-data)))))))
+                    (let* ((key (alist-get 'key entry))
+                           (sops-output (auth-source-sops-decrypt))
+                           (sops-data (auth-source-sops-parse auth-source-sops-file sops-output))
+                           (entry (assoc key sops-data)))
+                      (format "%s" (auth-source-sops-get 'secret entry)))))))
 
 (defun auth-source-sops--find-matching-entries (sops-parsed host user port require)
   "Find entries in SOPS-PARSED matching HOST, USER, PORT, and REQUIRE."
@@ -158,9 +160,10 @@ Limit to MAX results if specified."
     (cdr (assoc key data))))
 
 (defun auth-source-sops-parse-entry (entry)
-  (let ((parsed (auth-source-sops-entry-parse-key (car entry)))
-        (value (auth-source-sops-entry-parse-value (cdr entry))))
-    (append value parsed)))
+  (let* ((key (car entry))
+         (parsed (auth-source-sops-entry-parse-key key))
+         (value (auth-source-sops-entry-parse-value (cdr entry))))
+    (append value parsed `((key . ,key)))))
 
 (defun auth-source-sops-entry-parse-key (key)
   "Parse entry into host, user, and port components."
