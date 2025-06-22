@@ -140,6 +140,9 @@ Limit to MAX results if specified."
     (buffer-string)))
 
 (defun auth-source-sops-decrypt ()
+  "Decrypt the sops-encrypted auth file and return its contents as a string.
+If `auth-source-sops-age-key' is set, use it to set the SOPS_AGE_KEY
+environment variable before decryption."
   (let ((process-environment (copy-sequence process-environment)))
     (with-temp-buffer
       (when auth-source-sops-age-key
@@ -149,15 +152,28 @@ Limit to MAX results if specified."
       (buffer-string))))
 
 (defun auth-source-sops-parse (file output)
+  "Parse decrypted sops OUTPUT based on FILE extension.
+FILE is the path to the encrypted file.
+OUTPUT is the decrypted content as a string.
+Currently only supports YAML files (.yaml extension).
+Returns an alist representation of the parsed data."
   (cond ((string-suffix-p ".yaml" file)
          (yaml-parse-string output :object-type 'alist :object-key-type 'string))
         (t (error "File parser not implemented"))))
 
 (defun auth-source-sops-get (key entry)
+  "Get value for KEY from parsed sops ENTRY.
+KEY is a symbol representing the field to retrieve (e.g. `user', `host').
+ENTRY is a cons cell containing the raw sops entry data."
   (let ((data (auth-source-sops-parse-entry entry)))
     (cdr (assoc key data))))
 
 (defun auth-source-sops-parse-entry (entry)
+  "Parse ENTRY into a normalized alist of credential data.
+ENTRY should be a cons cell where car is the key (e.g. user@host:port)
+and cdr is the value containing secret data.
+Returns an alist containing parsed components (host, user, port)
+merged with the secret data and original key."
   (let* ((key (car entry))
          (parsed (auth-source-sops-entry-parse-key key))
          (value (auth-source-sops-entry-parse-value (cdr entry))))
