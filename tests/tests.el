@@ -1,21 +1,20 @@
-;;; auth-source-sops-test.el --- Tests for auth-source-sops -*- lexical-binding: t -*-
+;;; auth-source-sops-test.el --- Tests for auth-source-sops -*- lexical-binding: t; no-byte-compile: t -*-
 
 ;;; Commentary:
 
 ;; Tests for the auth-source-sops package.
 
 ;;; Code:
+(defvar current-dir (file-name-directory (or load-file-name buffer-file-name)))
+
 (require 'ert)
+(require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
 
-(setq-local current-dir (file-name-directory (or load-file-name buffer-file-name)))
-
-(load-file (expand-file-name "../auth-source-sops.el" current-dir))
+(defvar auth-source-unencrypted-sops-file
+  (expand-file-name "./secrets.yaml" current-dir))
 
 (setq auth-source-sops-file
       (expand-file-name "./encrypted.yaml" current-dir))
-
-(setq auth-source-unencrypted-sops-file
-      (expand-file-name "./secrets.yaml" current-dir))
 
 (setq auth-source-sops-age-key
       (expand-file-name "./age" current-dir))
