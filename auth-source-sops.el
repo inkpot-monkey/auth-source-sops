@@ -31,8 +31,7 @@
   :type 'file)
 
 (cl-defun auth-source-sops-search (&rest spec
-                                   &key backend type host user port
-                                     require max
+                                   &key backend type host user port require max
                                      &allow-other-keys)
   "Given some search query, return matching credentials.
 
@@ -56,8 +55,7 @@ HOST, USER, PORT, REQUIRE, and MAX."
         (entry-port (alist-get 'port entry))
         (entry-secret (or (alist-get 'secret entry)
                           (alist-get 'password entry))))
-    
-    (and 
+    (and
      ;; Basic criteria matching
      entry-host
      (string= host entry-host)
@@ -69,7 +67,6 @@ HOST, USER, PORT, REQUIRE, and MAX."
                   (equal port entry-port)
                 (equal (string-to-number port) entry-port))))
      entry-secret
-     
      ;; Required fields check
      (or (null require)
          (seq-every-p (lambda (field)
@@ -77,7 +74,7 @@ HOST, USER, PORT, REQUIRE, and MAX."
                       require)))))
 
 (defun auth-source-sops--build-result (entry user port)
-  "Build a properly formatted result from ENTRY with fallbacks USER and PORT."
+  "Build a properly formatted result from ENTRY with fallback USER and PORT."
   (let ((entry-host (alist-get 'host entry))
         (entry-user (alist-get 'user entry))
         (entry-port (alist-get 'port entry)))
@@ -110,7 +107,7 @@ Limit to MAX results if specified."
   (let* ((sops-output (auth-source-sops-decrypt))
          (sops-data (auth-source-sops-parse auth-source-sops-file sops-output))
          (sops-parsed (mapcar #'auth-source-sops-parse-entry sops-data))
-         (matching-entries (auth-source-sops--find-matching-entries 
+         (matching-entries (auth-source-sops--find-matching-entries
                             sops-parsed host user port require)))
     
     ;; Apply max limit if specified
@@ -137,7 +134,7 @@ Limit to MAX results if specified."
 
 
 (defun get-string-from-file (filePath)
-  "Return file content as string."
+  "Return file content of FILEPATH as string."
   (with-temp-buffer
     (insert-file-contents filePath)
     (buffer-string)))
@@ -154,7 +151,7 @@ Limit to MAX results if specified."
 (defun auth-source-sops-parse (file output)
   (cond ((string-suffix-p ".yaml" file)
          (yaml-parse-string output :object-type 'alist :object-key-type 'string))
-        (t (error "sops.json files not implemented"))))
+        (t (error "File parser not implemented"))))
 
 (defun auth-source-sops-get (key entry)
   (let ((data (auth-source-sops-parse-entry entry)))
@@ -167,11 +164,11 @@ Limit to MAX results if specified."
     (append value parsed `((key . ,key)))))
 
 (defun auth-source-sops-entry-parse-key (key)
-  "Parse entry into host, user, and port components."
+  "Parse KEY into host, user, and port components."
   (let* ((key-str (format "%s" key))
          (user-host (split-string key-str "@"))
-         (user (if (> (length user-host) 1) 
-                   (car user-host) 
+         (user (if (> (length user-host) 1)
+                   (car user-host)
                  nil))
          (host-port (if (> (length user-host) 1)
                         (nth 1 user-host)
@@ -182,13 +179,13 @@ Limit to MAX results if specified."
                    (string-to-number (nth 1 host-port-split))
                  nil)))
     `((host . ,host)
-      (user . ,user) 
+      (user . ,user)
       (port . ,port))))
 
 (defun auth-source-sops-entry-parse-value (value)
-  "Extract sequence items from SECRET."
+  "Extract sequence items from VALUE."
   (if (eq (type-of value) 'vector)
-      (cl-remove-if-not 
+      (cl-remove-if-not
        (lambda (pair)
          (or (stringp (cdr pair))
              (numberp (cdr pair))))
