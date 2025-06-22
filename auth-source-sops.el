@@ -30,9 +30,8 @@
   "A file containing the SOPS_AGE_KEY."
   :type 'file)
 
-(cl-defun auth-source-sops-search (&rest spec
-                                   &key backend type host user port require max
-                                     &allow-other-keys)
+(cl-defun auth-source-sops-search
+    (&rest spec &key backend require type max host user port &allow-other-keys)
   "Given some search query, return matching credentials.
 
 See `auth-source-search' for details on the parameters SPEC, BACKEND, TYPE,
