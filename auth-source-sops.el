@@ -80,9 +80,7 @@ HOST, USER, PORT, REQUIRE, and MAX."
   "Build a properly formatted result from ENTRY with fallbacks USER and PORT."
   (let ((entry-host (alist-get 'host entry))
         (entry-user (alist-get 'user entry))
-        (entry-port (alist-get 'port entry))
-        (entry-secret (or (alist-get 'secret entry)
-                          (alist-get 'password entry))))
+        (entry-port (alist-get 'port entry)))
     (list :host entry-host
           :user (or entry-user user)
           :port (or entry-port port)
@@ -90,8 +88,11 @@ HOST, USER, PORT, REQUIRE, and MAX."
                     (let* ((key (alist-get 'key entry))
                            (sops-output (auth-source-sops-decrypt))
                            (sops-data (auth-source-sops-parse auth-source-sops-file sops-output))
-                           (entry (assoc key sops-data)))
-                      (format "%s" (auth-source-sops-get 'secret entry)))))))
+                           (entry (assoc key sops-data))
+                           (data (auth-source-sops-parse-entry entry))
+                           (secret (or (alist-get 'secret data)
+                                       (alist-get 'password data))))
+                      (format "%s" secret))))))
 
 (defun auth-source-sops--find-matching-entries (sops-parsed host user port require)
   "Find entries in SOPS-PARSED matching HOST, USER, PORT, and REQUIRE."
