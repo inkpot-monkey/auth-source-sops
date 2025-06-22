@@ -71,7 +71,13 @@ HOST, USER, PORT, REQUIRE, and MAX."
      ;; Required fields check
      (or (null require)
          (seq-every-p (lambda (field)
-                        (and (alist-get field entry) t))
+                        (cond
+                          ;; Special handling for 'secret field
+                          ((eq field 'secret)
+                           (or (alist-get 'secret entry)
+                               (alist-get 'password entry)))
+                          ;; Regular field checking
+                          (t (alist-get field entry))))
                       require)))))
 
 (defun auth-source-sops--build-result (entry user port)
