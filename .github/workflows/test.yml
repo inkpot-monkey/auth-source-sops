@@ -49,6 +49,9 @@ jobs:
       run: |
         sudo apt-get install ispell
 
+    - name: Setup SOPS   
+      uses: nhedger/setup-sops@v2
+
     - name: Initialize sandbox
       run: |
         SANDBOX_DIR=$(mktemp -d) || exit 1
