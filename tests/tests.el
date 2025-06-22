@@ -59,6 +59,14 @@
     (should (equal (plist-get result :port) nil))
     (should (equal (funcall (plist-get result :secret)) "6"))))
 
+(ert-deftest auth-source-sops-search-require-secret-test ()
+  "Test search with require fields specified."
+  (let ((result (car (auth-source-search :host "api.github.com" :require '(secret)))))
+    (should (equal (plist-get result :host) "api.github.com"))
+    (should (equal (plist-get result :user) "apiKey"))
+    (should (equal (plist-get result :port) nil))
+    (should (equal (funcall (plist-get result :secret)) "6"))))
+
 (ert-deftest auth-source-sops-search-max-results-test ()
   "Test search with max results specified."
   (let ((results (auth-source-search :host "api.github.com" :max 2)))
