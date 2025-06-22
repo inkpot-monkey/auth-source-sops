@@ -4,7 +4,7 @@
 ;; Version: 1.0.0
 ;; Created: 22 Jun 2025
 ;; URL: https://github.com/inkpot-monkey/auth-source-sops
-;; Package-Requires: ((emacs "24.1") (yaml "0.5.1"))
+;; Package-Requires: ((emacs "25.1") (yaml "0.5.1"))
 
 ;;; Commentary:
 
