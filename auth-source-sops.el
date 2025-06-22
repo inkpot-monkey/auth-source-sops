@@ -221,3 +221,7 @@ merged with the secret data and original key."
 
 (provide 'auth-source-sops)
 ;;; auth-source-sops.el ends here
+
+;; Local Variables:
+;; ispell-buffer-session-localwords: ("auth" "yaml")
+;; End:
