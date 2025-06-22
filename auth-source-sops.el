@@ -134,7 +134,7 @@ Limit to MAX results if specified."
 
 
 
-(defun get-string-from-file (filePath)
+(defun auth-source-sops-get-string-from-file (filePath)
   "Return file content of FILEPATH as string."
   (with-temp-buffer
     (insert-file-contents filePath)
@@ -147,7 +147,7 @@ environment variable before decryption."
   (let ((process-environment (copy-sequence process-environment)))
     (with-temp-buffer
       (when auth-source-sops-age-key
-        (setenv "SOPS_AGE_KEY" (get-string-from-file auth-source-sops-age-key)))
+        (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
       (call-process auth-source-sops-executable nil t nil
                     "decrypt" auth-source-sops-file)
       (buffer-string))))

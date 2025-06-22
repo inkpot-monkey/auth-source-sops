@@ -32,7 +32,7 @@
   (should (equal
            (auth-source-sops-decrypt)
            (remove-escaped-quotes
-            (get-string-from-file auth-source-unencrypted-sops-file)))))
+            (auth-source-sops-get-string-from-file auth-source-unencrypted-sops-file)))))
 
 ;; Search tests
 (ert-deftest auth-source-sops-search-basic-test ()
