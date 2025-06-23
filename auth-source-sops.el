@@ -68,16 +68,17 @@ HOST, USER, PORT, REQUIRE, and MAX."
                   (equal port entry-port)
                 (equal (string-to-number port) entry-port))))
      entry-secret
-     ;; Required fields check
+     ;; Required fields check - convert keywords to symbols
      (or (null require)
          (seq-every-p (lambda (field)
-                        (cond
-                          ;; Special handling for 'secret field
-                          ((eq field 'secret)
-                           (or (alist-get 'secret entry)
-                               (alist-get 'password entry)))
-                          ;; Regular field checking
-                          (t (alist-get field entry))))
+                        ;; Convert keyword to symbol by removing the leading colon
+                        (let ((sym-field (if (keywordp field)
+                                             (intern (substring (symbol-name field) 1))
+                                           field)))
+                          (cond
+                            ((eq sym-field 'secret)
+                             entry-secret)
+                            (t (alist-get sym-field entry)))))
                       require)))))
 
 (defun auth-source-sops--build-result (entry user port)
