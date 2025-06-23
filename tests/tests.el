@@ -43,54 +43,99 @@
     (should (equal (plist-get result :port) nil))
     (should (equal (funcall (plist-get result :secret)) "1"))))
 
+;; There are multiples of this search but this works because
+;; auth-source-search has a default of :max 1 and the first
+;; match in the the example secrets.yaml file matches this
 (ert-deftest auth-source-sops-search-user-test ()
   "Test search with user specified."
-  (let ((result (car (auth-source-search :host "api.github.com" :user "emacs"))))
-    (should (equal (plist-get result :host) "api.github.com"))
-    (should (equal (plist-get result :user) "emacs"))
+  (let ((result (car (auth-source-search :host "github.com" :user "example"))))
+    (should (equal (plist-get result :host) "github.com"))
+    (should (equal (plist-get result :user) "example"))
     (should (equal (plist-get result :port) nil))
+    (should (equal (funcall (plist-get result :secret)) "3"))))
+
+(ert-deftest auth-source-sops-search-port-test ()
+  "Test search with user specified."
+  (let ((result (car (auth-source-search :host "github.com" :port 22))))
+    (should (equal (plist-get result :host) "github.com"))
+    (should (equal (plist-get result :user) nil))
+    (should (equal (plist-get result :port) 22))
+    (should (equal (funcall (plist-get result :secret)) "4"))))
+
+(ert-deftest auth-source-sops-search-port-and-user-test ()
+  "Test search with user specified."
+  (let ((result (car (auth-source-search :host "github.com" :user "example" :port 22))))
+    (should (equal (plist-get result :host) "github.com"))
+    (should (equal (plist-get result :user) "example"))
+    (should (equal (plist-get result :port) 22))
+    (should (equal (funcall (plist-get result :secret)) "5"))))
+
+;; Preference tests
+;; List members should take precedence over elements defined in the key
+(ert-deftest auth-source-sops-list-precedence-test ()
+  "Test search with user specified."
+  (let ((result (car (auth-source-search :host "api.github.com" :user "override"))))
+    (should (equal (plist-get result :host) "api.github.com"))
+    (should (equal (plist-get result :user) "override"))
     (should (equal (funcall (plist-get result :secret)) "7"))))
 
-(ert-deftest auth-source-sops-search-require-test ()
+;; Nested list tests
+(ert-deftest auth-source-sops-nested-list-test ()
+  "Test search with user specified."
+  (let ((result (car (auth-source-search :host "nested"))))
+    (should (equal (plist-get result :host) "nested"))
+    (should (equal (plist-get result :user) "example"))
+    (should (equal (funcall (plist-get result :secret)) "8"))))
+
+;; Max tests
+(ert-deftest auth-source-sops-search-max-results-test ()
+  "Test search with max results specified."
+  (let ((results (auth-source-search :host "github.com" :max 4)))
+    (should (= (length results) 4))
+    (should (equal (plist-get (nth 0 results) :host) "github.com"))
+    (should (equal (funcall (plist-get (nth 0 results) :secret)) "2"))
+    (should (equal (plist-get (nth 1 results) :host) "github.com"))
+    (should (equal (plist-get (nth 1 results) :user) "example"))
+    (should (equal (funcall (plist-get (nth 1 results) :secret)) "3"))
+    (should (equal (plist-get (nth 2 results) :host) "github.com"))
+    (should (equal (plist-get (nth 2 results) :port) 22))
+    (should (equal (funcall (plist-get (nth 2 results) :secret)) "4"))
+    (should (equal (plist-get (nth 3 results) :host) "github.com"))
+    (should (equal (plist-get (nth 3 results) :user) "example"))
+    (should (equal (plist-get (nth 3 results) :port) 22))
+    (should (equal (funcall (plist-get (nth 3 results) :secret)) "5"))))
+
+;; Require tests
+(ert-deftest auth-source-sops-search-require-user-test ()
   "Test search with require fields specified."
-  (let ((result (car (auth-source-search :host "api.github.com" :require '(user)))))
+  (let ((result (car (auth-source-search
+                      :host "api.github.com"
+                      :require '(:user)))))
     (should (equal (plist-get result :host) "api.github.com"))
-    (should (equal (plist-get result :user) "apiKey"))
+    (should (equal (plist-get result :user) "apikey"))
     (should (equal (plist-get result :port) nil))
     (should (equal (funcall (plist-get result :secret)) "6"))))
 
 (ert-deftest auth-source-sops-search-require-secret-test ()
   "Test search with require fields specified."
-  (let ((result (car (auth-source-search :host "api.github.com" :require '(secret)))))
+  (let ((result (car (auth-source-search
+                      :host "api.github.com"
+                      :user "apikey"
+                      :require '(:secret)))))
     (should (equal (plist-get result :host) "api.github.com"))
-    (should (equal (plist-get result :user) "apiKey"))
+    (should (equal (plist-get result :user) "apikey"))
     (should (equal (plist-get result :port) nil))
     (should (equal (funcall (plist-get result :secret)) "6"))))
 
-(ert-deftest auth-source-sops-search-max-results-test ()
-  "Test search with max results specified."
-  (let ((results (auth-source-search :host "api.github.com" :max 2)))
-    (should (<= (length results) 2))
-    (should (equal (plist-get (nth 0 results) :host) "api.github.com"))
-    (should (equal (plist-get (nth 0 results) :user) "apiKey"))
-    (should (equal (plist-get (nth 1 results) :host) "api.github.com"))
-    (should (equal (plist-get (nth 1 results) :user) "emacs"))))
-
-(ert-deftest auth-source-sops-multiple-results-test ()
-  "Test finding multiple matching entries."
-  (let ((results (auth-source-sops--multiple-results "github.com" nil nil)))
-    (should (equal (length results) 4))
-    (should (equal (plist-get (nth 0 results) :host) "github.com"))
-    (should (equal (plist-get (nth 0 results) :user) nil))
-    (should (equal (plist-get (nth 0 results) :port) nil))
-    (should (equal (plist-get (nth 1 results) :host) "github.com"))
-    (should (equal (plist-get (nth 1 results) :user) "example"))
-    (should (equal (plist-get (nth 1 results) :port) nil))
-    (should (equal (plist-get (nth 2 results) :host) "github.com"))
-    (should (equal (plist-get (nth 2 results) :user) nil))
-    (should (equal (plist-get (nth 2 results) :port) 22))
-    (should (equal (plist-get (nth 3 results) :host) "github.com")) 
-    (should (equal (plist-get (nth 3 results) :user) "example"))
-    (should (equal (plist-get (nth 3 results) :port) 22))))
+(ert-deftest auth-source-sops-search-require-multiple-test ()
+  "Test search with require fields specified."
+  (let ((result (car (auth-source-search
+                      :host "api.github.com"
+                      :user "apikey"
+                      :require '(:secret :user)))))
+    (should (equal (plist-get result :host) "api.github.com"))
+    (should (equal (plist-get result :user) "apikey"))
+    (should (equal (plist-get result :port) nil))
+    (should (equal (funcall (plist-get result :secret)) "6"))))
 
 ;;; auth-source-sops-test.el ends here
