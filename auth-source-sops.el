@@ -218,6 +218,7 @@ merged with the secret data and original key."
                (aref value 0)))
     (list (cons 'secret value))))
 
+;;;###autoload
 (defun auth-source-sops-enable ()
   "Enable auth-source-sops."
   (if (executable-find auth-source-sops-executable)
