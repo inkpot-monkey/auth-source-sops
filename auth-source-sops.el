@@ -96,7 +96,8 @@ Returns a list of matching entries (plists)."
 (defun auth-source-sops--match-p (val criteria)
   "Return non-nil if VAL matches CRITERIA.
 VAL is the value from the secret file.
-CRITERIA can be a string (matched via regex), a list (matched via `member'), or t."
+CRITERIA can be a string (matched via regex), a list (matched via `member'),
+or t."
   (cond
    ((eq criteria t) t)
    ((null criteria) t)
@@ -169,8 +170,10 @@ Format: (MODIFICATION-TIME . PARSED-STRUCTURE)")
 
 (defun auth-source-sops--get-raw-structure ()
   "Return the parsed structure of the sops file without full decryption.
-Uses `auth-source-sops--raw-cache' to avoid re-parsing if the file hasn't changed.
-In this state, top-level keys are readable, but values are encrypted strings."
+Uses `auth-source-sops--raw-cache' to avoid re-parsing if the file
+hasn't changed.
+In this state, top-level keys are readable, but values are encrypted
+strings."
   (if (and auth-source-sops--raw-cache
            (equal (car auth-source-sops--raw-cache)
                   (file-attribute-modification-time (file-attributes auth-source-sops-file))))
@@ -355,7 +358,7 @@ Currently supports .yaml and .json files."
 
 (defun auth-source-sops-get (key entry)
   "Retrieve value for KEY from a raw sops ENTRY.
-KEY is a symbol (e.g., 'user, 'host).
+KEY is a symbol (e.g., `user', `host').
 This is a convenience function for manual extraction."
   (let ((data (auth-source-sops-parse-entry entry)))
     (cdr (assoc key (car data)))))
@@ -363,7 +366,7 @@ This is a convenience function for manual extraction."
 (defun auth-source-sops-parse-entry (entry)
   "Normalize a raw sops ENTRY into a list of constituent credential alists.
 ENTRY is a cons cell (KEY-STRING . VALUE).
-Handles 'exploding' the key and normalizing sequence values."
+Handles `exploding' the key and normalizing sequence values."
   (let* ((key (car entry))
          (parsed-key (auth-source-sops-entry-parse-key key))
          (values (auth-source-sops-entry-parse-value (cdr entry))))
@@ -396,7 +399,7 @@ Supports common formats like user@host, host:port, etc."
 (defun auth-source-sops-entry-parse-value (value)
   "Normalize the VALUE part of a sops entry.
 If VALUE is a list/vector, it is treated as multiple credential sets.
-Keys like 'machine' and 'password' are normalized."
+Keys like `machine' and `password' are normalized."
   (if (and (vectorp value) (> (length value) 0))
       (cl-loop for item across value
                collect (cl-loop for pair in item
