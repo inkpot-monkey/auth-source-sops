@@ -14,6 +14,9 @@
 (require 'auth-source)
 (require 'cl-lib)
 (require 'yaml)
+(require 'subr-x)
+
+(declare-function yaml-parse-string "yaml" (string &rest args))
 
 (defgroup auth-source-sops nil
   "Sops integration within auth-source."
@@ -69,27 +72,22 @@ HOST, USER, PORT, REQUIRE, and MAX."
      ;; Basic criteria matching
      entry-host
      (auth-source-sops--match-p entry-host host)
-     (or (null user)
-         (and entry-user (auth-source-sops--match-p entry-user user)))
+     (or (null user) (auth-source-sops--match-p entry-user user))
      (or (null port)
-         (and entry-port
-              (auth-source-sops--match-p (format "%s" entry-port)
-                                         (if (listp port)
-                                             (mapcar (lambda (p) (format "%s" p)) port)
-                                           (format "%s" port)))))
+         (auth-source-sops--match-p (and entry-port (format "%s" entry-port))
+                                    (if (listp port)
+                                        (mapcar (lambda (p) (format "%s" p)) port)
+                                      (format "%s" port))))
      entry-secret
-     ;; Required fields check - convert keywords to symbols
-     (or (null require)
-         (seq-every-p (lambda (field)
-                        ;; Convert keyword to symbol by removing the leading colon
-                        (let ((sym-field (if (keywordp field)
-                                             (intern (substring (symbol-name field) 1))
-                                           field)))
-                          (cond
-                           ((eq sym-field 'secret)
-                            entry-secret)
-                           (t (alist-get sym-field entry)))))
-                      require)))))
+     ;; Required fields check
+     (cl-every (lambda (field)
+                 (let ((sym-field (if (keywordp field)
+                                      (intern (substring (symbol-name field) 1))
+                                    field)))
+                   (if (eq sym-field 'secret)
+                       entry-secret
+                     (alist-get sym-field entry))))
+               require))))
 
 (defun auth-source-sops--build-result (entry user port)
   "Build a properly formatted result from ENTRY with fallback USER and PORT."
@@ -116,16 +114,18 @@ HOST, USER, PORT, REQUIRE, and MAX."
 Returns results matching HOST, USER, PORT criteria.
 Only include entries with REQUIRE fields if specified.
 Limit to MAX results if specified."
-  (let* ((sops-output (auth-source-sops-decrypt))
-         (sops-data (auth-source-sops-parse auth-source-sops-file sops-output))
-         (sops-parsed (mapcar #'auth-source-sops-parse-entry sops-data))
-         (matching-entries (auth-source-sops--find-matching-entries
-                            sops-parsed host user port require)))
-    
-    ;; Apply max limit if specified
-    (if (and max (> (length matching-entries) max))
-        (seq-take matching-entries max)
-      matching-entries)))
+  (let ((results (thread-last
+                   (auth-source-sops-decrypt)
+                   (auth-source-sops-parse auth-source-sops-file)
+                   (mapcar #'auth-source-sops-parse-entry)
+                   (cl-remove-if-not (lambda (entry)
+                                       (auth-source-sops--entry-matches-criteria-p
+                                        entry host user port require)))
+                   (mapcar (lambda (entry)
+                             (auth-source-sops--build-result entry user port))))))
+    (if max
+        (seq-take results max)
+      results)))
 
 (defvar auth-source-sops-backend
   (auth-source-backend
@@ -174,20 +174,50 @@ environment variable before decryption."
         (when (file-exists-p auth-source-sops-age-key)
           (auth-source-sops--check-permissions auth-source-sops-age-key))
         (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
-      ;; bind stderr to temp buffer to prevent leakage to *Messages*
-      (let ((exit-code (call-process auth-source-sops-executable nil (list t t) nil
-                                     "decrypt" auth-source-sops-file)))
-        (unless (zerop exit-code)
-          (error "Sops decryption failed with exit code %d: %s"
-                 exit-code (buffer-string)))
-        (buffer-string)))))
+      
+      (let ((output-buffer (generate-new-buffer " *sops-output*"))
+            (error-buffer (generate-new-buffer " *sops-error*"))
+            (exit-code nil)
+            (proc-done nil))
+        (unwind-protect
+            (progn
+              (let ((proc (make-process
+                           :name "sops-decrypt"
+                           :buffer output-buffer
+                           :stderr error-buffer
+                           :connection-type 'pipe  ; Use pipe to avoid PTY issues
+                           :command (list auth-source-sops-executable "decrypt" auth-source-sops-file)
+                           :sentinel (lambda (p _e)
+                                       (when (if (fboundp 'process-live-p)
+                                                 (not (process-live-p p))
+                                               (memq (process-status p) '(exit signal failed)))
+                                         (setq exit-code (process-exit-status p))
+                                         (setq proc-done t))))))
+                  (set-process-query-on-exit-flag proc nil)
+                  ;; Also handle the stderr pipe process if it exists
+                  (let ((stderr-proc (get-buffer-process error-buffer)))
+                    (when (processp stderr-proc)
+                      (set-process-query-on-exit-flag stderr-proc nil)))
+                  
+                  (let ((start-time (float-time)))
+                    (while (not proc-done)
+                      (accept-process-output proc 0.1)
+                      (when (> (- (float-time) start-time) 10.0) ;; 10 second timeout
+                        (delete-process proc)
+                        (error "Sops decryption timed out after 10 seconds")))))
+              
+              (unless (zerop exit-code)
+                (error "Sops decryption failed with exit code %s: %s"
+                       exit-code (with-current-buffer error-buffer (buffer-string))))
+              (with-current-buffer output-buffer (buffer-string)))
+          ;; Cleanup
+          (when (get-buffer-process output-buffer)
+            (delete-process (get-buffer-process output-buffer)))
+          (kill-buffer output-buffer)
+          (kill-buffer error-buffer))))))
 
 (defun auth-source-sops-parse (file output)
-  "Parse decrypted sops OUTPUT based on FILE extension.
-FILE is the path to the encrypted file.
-OUTPUT is the decrypted content as a string.
-Currently only supports YAML files (.yaml extension).
-Returns an alist representation of the parsed data."
+  "Parse decrypted sops OUTPUT based on FILE extension."
   (cond ((string-suffix-p ".yaml" file)
          (yaml-parse-string output :object-type 'alist :object-key-type 'string))
         (t (error "File parser not implemented"))))
@@ -223,13 +253,22 @@ Supports standard auth-source formats:
          (host nil)
          (user nil)
          (port nil))
-    (if (string-match "^\\(?:\\(.*\\)@\\)?\\(.*?\\)\\(?::\\([0-9]+\\)\\)?$" key-str)
+    ;; Extract port if present (must be at end of string, preceded by colon)
+    (if (string-match ":\\([0-9]+\\)$" key-str)
+        (progn
+          (setq port (string-to-number (match-string 1 key-str)))
+          ;; Remove port from key-str for further parsing
+          (setq key-str (substring key-str 0 (match-beginning 0)))))
+    
+    ;; Extract user and host
+    ;; Greedy match ensures everything before the LAST @ is captured as user
+    (if (string-match "^\\(.*\\)@\\([^@]+\\)$" key-str)
         (progn
           (setq user (match-string 1 key-str))
-          (setq host (match-string 2 key-str))
-          (let ((port-str (match-string 3 key-str)))
-            (setq port (when port-str (string-to-number port-str)))))
+          (setq host (match-string 2 key-str)))
+      ;; No @ found, entire string is host
       (setq host key-str))
+    
     `((host . ,host)
       (user . ,user)
       (port . ,port))))
