@@ -187,3 +187,33 @@ repro-sudo:
                (lambda () (error "Should not be called"))))
       (should (equal (funcall secret-fn) "1")))))
 
+(ert-deftest auth-source-sops-list-argument-test ()
+  "Test search with list arguments."
+  ;; Matches "github.com" which is in the list
+  (let ((result (car (auth-source-search :host '("other.com" "github.com")))))
+    (should result)
+    (should (equal (plist-get result :host) "github.com"))))
+
+(ert-deftest auth-source-sops-complex-key-test ()
+  "Test parsing of complex user@host keys."
+  (let ((result (car (auth-source-search :host "complex-host" :user "me@email.com" :port 123))))
+    (should result)
+    (should (equal (plist-get result :host) "complex-host"))
+    (should (equal (plist-get result :user) "me@email.com"))
+    (should (equal (plist-get result :port) 123))
+    (should (equal (funcall (plist-get result :secret)) "99"))))
+
+(ert-deftest auth-source-sops-wildcard-host-test ()
+  "Test that a wildcard host 't' triggers a warning and returns nil."
+  ;; Mock warn to just log a message we can check, or ensure it doesn't error
+  (cl-letf (((symbol-function 'warn) #'ignore))
+    (should (null (auth-source-search :host t)))))
+
+(ert-deftest auth-source-sops-malformed-yaml-test ()
+  "Test that malformed YAML (parser error) propagates as an error."
+  (auth-source-forget-all-cached)
+  ;; Mock decryption to return string "malformed" which triggers error in our mock yaml
+  (cl-letf (((symbol-function 'auth-source-sops-decrypt)
+             (lambda () "malformed")))
+    (should-error (auth-source-search :host "github"))))
+

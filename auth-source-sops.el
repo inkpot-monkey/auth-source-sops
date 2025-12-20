@@ -50,6 +50,14 @@ HOST, USER, PORT, REQUIRE, and MAX."
         (t
          (auth-source-sops--multiple-results host user port require max))))
 
+(defun auth-source-sops--match-p (val criteria)
+  "Return non-nil if VAL matches CRITERIA (string, list, or t)."
+  (cond
+   ((eq criteria t) t)
+   ((null criteria) t)
+   ((listp criteria) (member val criteria))
+   (t (string-equal val criteria))))
+
 (defun auth-source-sops--entry-matches-criteria-p (entry host user port require)
   "Check if ENTRY matches search criteria HOST, USER, PORT, and REQUIRE."
   (let ((entry-host (alist-get 'host entry))
@@ -60,12 +68,15 @@ HOST, USER, PORT, REQUIRE, and MAX."
     (and
      ;; Basic criteria matching
      entry-host
-     (string= host entry-host)
+     (auth-source-sops--match-p entry-host host)
      (or (null user)
-         (and entry-user (string= user entry-user)))
+         (and entry-user (auth-source-sops--match-p entry-user user)))
      (or (null port)
          (and entry-port
-              (string-equal (format "%s" port) (format "%s" entry-port))))
+              (auth-source-sops--match-p (format "%s" entry-port)
+                                         (if (listp port)
+                                             (mapcar (lambda (p) (format "%s" p)) port)
+                                           (format "%s" port)))))
      entry-secret
      ;; Required fields check - convert keywords to symbols
      (or (null require)
@@ -75,9 +86,9 @@ HOST, USER, PORT, REQUIRE, and MAX."
                                              (intern (substring (symbol-name field) 1))
                                            field)))
                           (cond
-                            ((eq sym-field 'secret)
-                             entry-secret)
-                            (t (alist-get sym-field entry)))))
+                           ((eq sym-field 'secret)
+                            entry-secret)
+                           (t (alist-get sym-field entry)))))
                       require)))))
 
 (defun auth-source-sops--build-result (entry user port)
@@ -184,23 +195,25 @@ merged with the secret data and original key."
     (append value parsed `((key . ,key)))))
 
 (defun auth-source-sops-entry-parse-key (key)
-  "Parse KEY into host, user, and port components."
+  "Parse KEY into host, user, and port components.
+Supports standard auth-source formats:
+ - host
+ - user@host
+ - host:port
+ - user@host:port
+ - user@email.com@host
+ - user@email.com@host:port (only if port is numeric)"
   (let* ((key-str (format "%s" key))
-         (user-host (split-string key-str "@"))
-         (user (if (> (length user-host) 1)
-                    (car user-host)
-                  nil))
-         (host-port (if (> (length user-host) 1)
-                        (nth 1 user-host)
-                      (car user-host)))
-         (host-port-split (split-string host-port ":"))
-         (host (car host-port-split))
-         (port-str (nth 1 host-port-split))
-         (port (if port-str
-                   (if (string-match-p "^[0-9]+$" port-str)
-                       (string-to-number port-str)
-                     port-str)
-                 nil)))
+         (host nil)
+         (user nil)
+         (port nil))
+    (if (string-match "^\\(?:\\(.*\\)@\\)?\\(.*?\\)\\(?::\\([0-9]+\\)\\)?$" key-str)
+        (progn
+          (setq user (match-string 1 key-str))
+          (setq host (match-string 2 key-str))
+          (let ((port-str (match-string 3 key-str)))
+            (setq port (when port-str (string-to-number port-str)))))
+      (setq host key-str))
     `((host . ,host)
       (user . ,user)
       (port . ,port))))
