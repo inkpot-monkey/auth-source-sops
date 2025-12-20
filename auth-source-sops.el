@@ -15,6 +15,7 @@
 (require 'cl-lib)
 (require 'yaml)
 (require 'subr-x)
+(require 'json)
 
 (declare-function yaml-parse-string "yaml" (string &rest args))
 
@@ -220,6 +221,8 @@ environment variable before decryption."
   "Parse decrypted sops OUTPUT based on FILE extension."
   (cond ((string-suffix-p ".yaml" file)
          (yaml-parse-string output :object-type 'alist :object-key-type 'string))
+        ((string-suffix-p ".json" file)
+         (json-parse-string output :object-type 'alist :array-type 'array))
         (t (error "File parser not implemented"))))
 
 (defun auth-source-sops-get (key entry)
@@ -277,12 +280,15 @@ Supports standard auth-source formats:
   "Extract sequence items from VALUE."
   (if (and (eq (type-of value) 'vector) (> (length value) 0))
       (cl-loop for pair in (aref value 0)
-               for key-str = (car pair)
+               for key-unparsed = (car pair)
                for val = (cdr pair)
                when (or (stringp val) (numberp val))
-               collect (cons (pcase key-str
-                               ("machine" 'host)
-                               (_ (intern key-str)))
+               collect (cons (let ((key-str (if (symbolp key-unparsed)
+                                                (symbol-name key-unparsed)
+                                              (format "%s" key-unparsed))))
+                               (if (string-equal key-str "machine")
+                                   'host
+                                 (intern key-str)))
                              val))
     (list (cons 'secret value))))
 
