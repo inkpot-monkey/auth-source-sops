@@ -6,8 +6,9 @@ Integrate [[https://getsops.io/][sops]] with Emacs ~auth-source~. This package a
 
 ** Prerequisites
 
-1. *sops*: Ensure the ~sops~ executable is installed on your system and available in your ~PATH~.
-2. *yaml.el*: This package requires ~yaml.el~ for parsing decrypted data.
+1. *sops binary*: The [[https://getsops.io/][sops]] executable must be installed and available in your ~exec-path~.
+2. *yaml.el*: Required for parsing decrypted YAML data.
+3. *Emacs 25.1+*: Built-in ~json.el~ is used for JSON support.
 
 ** 1. Installation
 
@@ -36,11 +37,13 @@ Configure the location of your encrypted secrets file and (optionally) your age 
 
 ~auth-source-sops-enable~ will verify that ~sops~ is installed and append ~sops~ to the global ~auth-sources~ list.
 
-** 3. Usage & File Structure
+*** YAML Structure
 
 ~auth-source-sops~ supports both simple and complex secret structures. You can use either ~.yaml~ or ~.json~ files.
 
-*** YAML Structure
+#+begin_quote
+*Important:* When using the default ~:incremental~ search method, the *top-level key* of your YAML/JSON file acts as a search index. To find a secret for a specific host, that host's name MUST be present in the top-level key (either as the key itself or part of a hierarchical key).
+#+end_quote
 
 You can use the key of the YAML object to define the host/user/port criteria, or define them explicitly within the value.
 
@@ -94,10 +97,17 @@ The same logic applies to JSON files:
 
 ** Configuration Options
 
-- ~auth-source-sops-executable~: Path to the ~sops~ executable (defaults to ~"sops"~).
-- ~auth-source-sops-search-method~: 
-    - ~:incremental~ (default): Only decrypts the specific branch of the file matching your search. Best for large files and security.
-    - ~:full~: Decrypts the entire file once and searches locally. Useful if you have many matches or for specialized workflows.
+All options can be configured via ~M-x customize-group auth-source-sops~.
+
+- ~auth-source-sops-executable~ :: Path to the ~sops~ executable.
+  - Default: ~"sops"~
+- ~auth-source-sops-file~ :: The path to your encrypted credentials file.
+  - Default: ~"~/.authinfo.sops.yaml"~
+- ~auth-source-sops-age-key~ :: Optional path to a file containing your `age` private key. If set, this package will automatically set the ~SOPS_AGE_KEY~ environment variable during decryption.
+  - Default: ~nil~
+- ~auth-source-sops-search-method~ :: The strategy used to query the encrypted file.
+  - ~:incremental~ (Default): Uses ~sops --extract~ to decrypt only the specific branch of the YAML/JSON structure that matches your host. This is faster for large files and avoids keeping the entire decrypted content in memory.
+  - ~:full~: Decrypts the entire file once and performs the search locally in Emacs.
 
 * License
 
