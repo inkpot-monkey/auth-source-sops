@@ -115,15 +115,16 @@ HOST, USER, PORT, REQUIRE, and MAX."
 Returns results matching HOST, USER, PORT criteria.
 Only include entries with REQUIRE fields if specified.
 Limit to MAX results if specified."
-  (let ((results (thread-last
-                   (auth-source-sops-decrypt)
-                   (auth-source-sops-parse auth-source-sops-file)
-                   (mapcar #'auth-source-sops-parse-entry)
-                   (cl-remove-if-not (lambda (entry)
-                                       (auth-source-sops--entry-matches-criteria-p
-                                        entry host user port require)))
-                   (mapcar (lambda (entry)
-                             (auth-source-sops--build-result entry user port))))))
+  (let* ((decrypted (auth-source-sops-decrypt))
+         (parsed (auth-source-sops-parse auth-source-sops-file decrypted))
+         (exploded (mapcan #'auth-source-sops-parse-entry parsed))
+         (results (thread-last
+                    exploded
+                    (cl-remove-if-not (lambda (entry)
+                                        (auth-source-sops--entry-matches-criteria-p
+                                         entry host user port require)))
+                    (mapcar (lambda (entry)
+                              (auth-source-sops--build-result entry user port))))))
     (if max
         (seq-take results max)
       results)))
@@ -146,10 +147,10 @@ Limit to MAX results if specified."
 
 
 
-(defun auth-source-sops-get-string-from-file (filePath)
-  "Return file content of FILEPATH as string."
+(defun auth-source-sops-get-string-from-file (file-path)
+  "Return file content of FILE-PATH as string."
   (with-temp-buffer
-    (insert-file-contents filePath)
+    (insert-file-contents file-path)
     (buffer-string)))
 
 (defun auth-source-sops--file-modes (file)
@@ -190,8 +191,8 @@ environment variable before decryption."
                            :command (list auth-source-sops-executable "decrypt" auth-source-sops-file)
                            :sentinel (lambda (p _e)
                                        (when (if (fboundp 'process-live-p)
-                                                 (not (process-live-p p))
-                                               (memq (process-status p) '(exit signal failed)))
+                                                  (not (process-live-p p))
+                                                (memq (process-status p) '(exit signal failed)))
                                          (setq exit-code (process-exit-status p))
                                          (setq proc-done t))))))
                   (set-process-query-on-exit-flag proc nil)
@@ -233,15 +234,17 @@ ENTRY is a cons cell containing the raw sops entry data."
     (cdr (assoc key data))))
 
 (defun auth-source-sops-parse-entry (entry)
-  "Parse ENTRY into a normalized alist of credential data.
+  "Parse ENTRY into a normalized list of alists of credential data.
 ENTRY should be a cons cell where car is the key (e.g. user@host:port)
 and cdr is the value containing secret data.
-Returns an alist containing parsed components (host, user, port)
+Returns a list of alists containing parsed components (host, user, port)
 merged with the secret data and original key."
   (let* ((key (car entry))
-         (parsed (auth-source-sops-entry-parse-key key))
-         (value (auth-source-sops-entry-parse-value (cdr entry))))
-    (append value parsed `((key . ,key)))))
+         (parsed-key (auth-source-sops-entry-parse-key key))
+         (values (auth-source-sops-entry-parse-value (cdr entry))))
+    (mapcar (lambda (value)
+              (append value parsed-key `((key . ,key))))
+            values)))
 
 (defun auth-source-sops-entry-parse-key (key)
   "Parse KEY into host, user, and port components.
@@ -277,20 +280,22 @@ Supports standard auth-source formats:
       (port . ,port))))
 
 (defun auth-source-sops-entry-parse-value (value)
-  "Extract sequence items from VALUE."
-  (if (and (eq (type-of value) 'vector) (> (length value) 0))
-      (cl-loop for pair in (aref value 0)
-               for key-unparsed = (car pair)
-               for val = (cdr pair)
-               when (or (stringp val) (numberp val))
-               collect (cons (let ((key-str (if (symbolp key-unparsed)
-                                                (symbol-name key-unparsed)
-                                              (format "%s" key-unparsed))))
-                               (if (string-equal key-str "machine")
-                                   'host
-                                 (intern key-str)))
-                             val))
-    (list (cons 'secret value))))
+  "Extract sequence items from VALUE.
+Returns a list of alists."
+  (if (and (vectorp value) (> (length value) 0))
+      (cl-loop for item across value
+               collect (cl-loop for pair in item
+                                for key-unparsed = (car pair)
+                                for val = (cdr pair)
+                                when (or (stringp val) (numberp val))
+                                collect (cons (let ((key-str (if (symbolp key-unparsed)
+                                                                (symbol-name key-unparsed)
+                                                              (format "%s" key-unparsed))))
+                                                (if (string-equal key-str "machine")
+                                                    'host
+                                                  (intern key-str)))
+                                              val)))
+    (list (list (cons 'secret value)))))
 
 ;;;###autoload
 (defun auth-source-sops-enable ()

@@ -7,6 +7,11 @@
     '(("repro-machine" . [ (("machine" . "machine.example.com") ("password" . "secure")) ])))
    ((string-match-p "repro-sudo" string)
     '(("repro-sudo" . [ (("host" . "sudo-host") ("port" . "sudo") ("user" . "root") ("password" . "sudo-password")) ])))
+   ((string-match-p "me@email.com" string)
+    '(("me@email.com@complex-host:99" . [ (("password" . 99)) ])))
+   ((string-match-p "multiple-users" string)
+    '(("multiple-users" . [ (("user" . "user1") ("password" . "pass1"))
+                            (("user" . "user2") ("password" . "pass2")) ])))
    ((string-match-p "malformed" string)
     (error "YAML parsing error"))
    (t
