@@ -8,6 +8,7 @@
 (defvar current-dir (file-name-directory (or load-file-name buffer-file-name)))
 
 (require 'ert)
+(require 'cl-lib)
 (require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
 
 (defvar auth-source-unencrypted-sops-file
@@ -137,5 +138,35 @@
     (should (equal (plist-get result :user) "apikey"))
     (should (equal (plist-get result :port) nil))
     (should (equal (funcall (plist-get result :secret)) "6"))))
+
+
+;; Reproduction tests
+(ert-deftest auth-source-sops-repro-machine-alias-test ()
+  "Test that 'machine' key in YAML is mapped to :host."
+  (cl-letf (((symbol-function 'auth-source-sops-decrypt)
+             (lambda () "
+repro-machine:
+  - machine: machine.example.com
+    password: secure
+")))
+    (let ((result (car (auth-source-search :host "machine.example.com"))))
+      (should result)
+      (should (equal (plist-get result :host) "machine.example.com"))
+      (should (equal (funcall (plist-get result :secret)) "secure")))))
+
+(ert-deftest auth-source-sops-repro-sudo-string-port-test ()
+  "Test matching a string port 'sudo' used by TRAMP."
+  (cl-letf (((symbol-function 'auth-source-sops-decrypt)
+             (lambda () "
+repro-sudo:
+  - host: sudo-host
+    port: sudo
+    user: root
+    password: sudo-password
+")))
+    (let ((result (car (auth-source-search :host "sudo-host" :port "sudo"))))
+      (should result)
+      (should (equal (plist-get result :port) "sudo"))
+      (should (equal (funcall (plist-get result :secret)) "sudo-password")))))
 
 ;;; auth-source-sops-test.el ends here

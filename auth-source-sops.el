@@ -64,9 +64,7 @@ HOST, USER, PORT, REQUIRE, and MAX."
          (and entry-user (string= user entry-user)))
      (or (null port)
          (and entry-port
-              (if (numberp port)
-                  (equal port entry-port)
-                (equal (string-to-number port) entry-port))))
+              (string-equal (format "%s" port) (format "%s" entry-port))))
      entry-secret
      ;; Required fields check - convert keywords to symbols
      (or (null require)
@@ -192,15 +190,18 @@ merged with the secret data and original key."
   (let* ((key-str (format "%s" key))
          (user-host (split-string key-str "@"))
          (user (if (> (length user-host) 1)
-                   (car user-host)
-                 nil))
+                    (car user-host)
+                  nil))
          (host-port (if (> (length user-host) 1)
                         (nth 1 user-host)
                       (car user-host)))
          (host-port-split (split-string host-port ":"))
          (host (car host-port-split))
-         (port (if (> (length host-port-split) 1)
-                   (string-to-number (nth 1 host-port-split))
+         (port-str (nth 1 host-port-split))
+         (port (if port-str
+                   (if (string-match-p "^[0-9]+$" port-str)
+                       (string-to-number port-str)
+                     port-str)
                  nil)))
     `((host . ,host)
       (user . ,user)
@@ -208,14 +209,15 @@ merged with the secret data and original key."
 
 (defun auth-source-sops-entry-parse-value (value)
   "Extract sequence items from VALUE."
-  (if (eq (type-of value) 'vector)
-      (cl-remove-if-not
-       (lambda (pair)
-         (or (stringp (cdr pair))
-             (numberp (cdr pair))))
-       (mapcar (lambda (pair)
-                 (cons (intern (car pair)) (cdr pair)))
-               (aref value 0)))
+  (if (and (eq (type-of value) 'vector) (> (length value) 0))
+      (cl-loop for pair in (aref value 0)
+               for key-str = (car pair)
+               for val = (cdr pair)
+               when (or (stringp val) (numberp val))
+               collect (cons (pcase key-str
+                               ("machine" 'host)
+                               (_ (intern key-str)))
+                             val))
     (list (cons 'secret value))))
 
 ;;;###autoload
