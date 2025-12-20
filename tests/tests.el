@@ -178,6 +178,18 @@ repro-sudo:
              (lambda (&rest args) 1)))
     (should-error (auth-source-sops-decrypt))))
 
+(ert-deftest auth-source-sops-permissions-test ()
+  "Test that insecure permissions trigger a warning."
+  ;; Mock file-modes to return world-readable (0644 = 420 decimal)
+  (cl-letf (((symbol-function 'auth-source-sops--file-modes) (lambda (_) #o644))
+            ((symbol-function 'warn) (lambda (&rest args) (error (apply #'format args)))) ; Turn warning into error for testing
+            ((symbol-function 'file-exists-p) (lambda (_) t))
+            ;; Mock decryption path to just return without doing real work
+            ((symbol-function 'call-process) (lambda (&rest _) 0))) ; success
+    ;; Since we turned warn into error, this should signal an error
+    (should-error (auth-source-sops-decrypt))))
+
+
 (ert-deftest auth-source-sops-cached-secret-test ()
   "Test that secret is cached and doesn't trigger decryption again."
   (let* ((result (car (auth-source-search :host "github")))

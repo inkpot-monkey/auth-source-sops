@@ -151,15 +151,31 @@ Limit to MAX results if specified."
     (insert-file-contents filePath)
     (buffer-string)))
 
+(defun auth-source-sops--file-modes (file)
+  "Return file modes for FILE. Wrapper around `file-modes'."
+  (file-modes file))
+
+(defun auth-source-sops--check-permissions (file)
+  "Check if FILE has secure permissions (0600).
+Warn if permissions are too open."
+  (let ((modes (auth-source-sops--file-modes file)))
+    (when (and modes (> (logand modes #o077) 0))
+      (warn "File %s has insecure permissions %o. Should be 0600." file modes))))
+
 (defun auth-source-sops-decrypt ()
   "Decrypt the sops-encrypted auth file and return its contents as a string.
 If `auth-source-sops-age-key' is set, use it to set the SOPS_AGE_KEY
 environment variable before decryption."
   (let ((process-environment (copy-sequence process-environment)))
+    (when (file-exists-p auth-source-sops-file)
+      (auth-source-sops--check-permissions auth-source-sops-file))
     (with-temp-buffer
       (when auth-source-sops-age-key
+        (when (file-exists-p auth-source-sops-age-key)
+          (auth-source-sops--check-permissions auth-source-sops-age-key))
         (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
-      (let ((exit-code (call-process auth-source-sops-executable nil t nil
+      ;; bind stderr to temp buffer to prevent leakage to *Messages*
+      (let ((exit-code (call-process auth-source-sops-executable nil (list t t) nil
                                      "decrypt" auth-source-sops-file)))
         (unless (zerop exit-code)
           (error "Sops decryption failed with exit code %d: %s"
