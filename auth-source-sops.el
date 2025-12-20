@@ -37,6 +37,13 @@
   "A file containing the SOPS_AGE_KEY."
   :type 'file)
 
+(defcustom auth-source-sops-search-method :incremental
+  "Method used to search for credentials.
+- `:incremental`: Decrypt only the necessary branches (more secure).
+- `:full`: Decrypt the entire file and search locally (faster for many matches, used in tests)."
+  :type '(choice (const :incremental)
+                 (const :full)))
+
 (cl-defun auth-source-sops-search
     (&rest spec &key backend require type max host user port &allow-other-keys)
   "Given some search query, return matching credentials.
@@ -60,7 +67,9 @@ HOST, USER, PORT, REQUIRE, and MAX."
    ((eq criteria t) t)
    ((null criteria) t)
    ((listp criteria) (member val criteria))
-   (t (string-equal val criteria))))
+   (t (and (stringp val)
+           (stringp criteria)
+           (not (not (string-match-p criteria val)))))))
 
 (defun auth-source-sops--entry-matches-criteria-p (entry host user port require)
   "Check if ENTRY matches search criteria HOST, USER, PORT, and REQUIRE."
@@ -92,15 +101,15 @@ HOST, USER, PORT, REQUIRE, and MAX."
 
 (defun auth-source-sops--build-result (entry user port)
   "Build a properly formatted result from ENTRY with fallback USER and PORT."
-  (let ((entry-host (alist-get 'host entry))
-        (entry-user (alist-get 'user entry))
-        (entry-port (alist-get 'port entry))
-        (entry-secret (or (alist-get 'secret entry)
-                          (alist-get 'password entry))))
+  (let* ((entry-host (cdr (assoc 'host entry)))
+         (entry-user (cdr (assoc 'user entry)))
+         (entry-port (cdr (assoc 'port entry)))
+         (entry-secret (or (cdr (assoc 'secret entry))
+                           (cdr (assoc 'password entry)))))
     (list :host entry-host
           :user (or entry-user user)
           :port (or entry-port port)
-          :secret (lambda () (format "%s" entry-secret)))))
+          :secret (lambda () (when entry-secret (format "%s" entry-secret))))))
 
 (defun auth-source-sops--find-matching-entries (sops-parsed host user port require)
   "Find entries in SOPS-PARSED matching HOST, USER, PORT, and REQUIRE."
@@ -110,24 +119,94 @@ HOST, USER, PORT, REQUIRE, and MAX."
         (push (auth-source-sops--build-result entry user port) results)))
     (nreverse results)))
 
+(defvar auth-source-sops--raw-cache nil
+  "Internal cache for raw (encrypted) file structure.")
+
+(defun auth-source-sops--get-raw-structure ()
+  "Read the sops file without decryption and return its structure.
+The keys are visible, but values are encrypted strings."
+  (if (and auth-source-sops--raw-cache
+           (equal (car auth-source-sops--raw-cache)
+                  (file-attribute-modification-time (file-attributes auth-source-sops-file))))
+      (cdr auth-source-sops--raw-cache)
+    (let* ((content (auth-source-sops-get-string-from-file auth-source-sops-file))
+           (parsed (auth-source-sops-parse auth-source-sops-file content)))
+      (setq auth-source-sops--raw-cache
+            (cons (file-attribute-modification-time (file-attributes auth-source-sops-file))
+                  parsed))
+      parsed)))
+
+(defun auth-source-sops--extract-branch (key)
+  "Decrypt only the branch at KEY using sops --extract."
+  (let ((output-buffer (generate-new-buffer " *sops-extract*"))
+        (error-buffer (generate-new-buffer " *sops-extract-error*"))
+        (process-environment (copy-sequence process-environment))
+        (exit-code nil)
+        (proc-done nil))
+    (unwind-protect
+        (progn
+          (when auth-source-sops-age-key
+            (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
+          (let ((proc (make-process
+                       :name "sops-extract"
+                       :buffer output-buffer
+                       :stderr error-buffer
+                       :command (list auth-source-sops-executable "decrypt" 
+                                      "--extract" (format "[\"%s\"]" key)
+                                      auth-source-sops-file)
+                       :sentinel (lambda (p _e)
+                                   (when (not (process-live-p p))
+                                     (setq exit-code (process-exit-status p))
+                                     (setq proc-done t))))))
+            (set-process-query-on-exit-flag proc nil)
+            (while (not proc-done)
+              (accept-process-output proc 0.1))
+            (if (zerop exit-code)
+                (with-current-buffer output-buffer (buffer-string))
+              (error "Sops extract failed: %s" 
+                     (with-current-buffer error-buffer (buffer-string))))))
+      (kill-buffer output-buffer)
+      (kill-buffer error-buffer))))
+
 (defun auth-source-sops--multiple-results (host user port &optional require max)
   "Search the sops file for matching credentials.
-Returns results matching HOST, USER, PORT criteria.
-Only include entries with REQUIRE fields if specified.
-Limit to MAX results if specified."
-  (let* ((decrypted (auth-source-sops-decrypt))
-         (parsed (auth-source-sops-parse auth-source-sops-file decrypted))
-         (exploded (mapcan #'auth-source-sops-parse-entry parsed))
-         (results (thread-last
-                    exploded
-                    (cl-remove-if-not (lambda (entry)
-                                        (auth-source-sops--entry-matches-criteria-p
-                                         entry host user port require)))
-                    (mapcar (lambda (entry)
-                              (auth-source-sops--build-result entry user port))))))
-    (if max
-        (seq-take results max)
-      results)))
+Returns results matching HOST, USER, PORT criteria."
+  (if (eq auth-source-sops-search-method :full)
+      ;; Original "full decryption" logic
+      (let* ((decrypted (auth-source-sops-decrypt))
+             (parsed (auth-source-sops-parse auth-source-sops-file decrypted))
+             (exploded (mapcan #'auth-source-sops-parse-entry parsed))
+             (results (thread-last
+                        exploded
+                        (cl-remove-if-not (lambda (entry)
+                                            (auth-source-sops--entry-matches-criteria-p
+                                             entry host user port require)))
+                        (mapcar (lambda (entry)
+                                  (auth-source-sops--build-result entry user port))))))
+        (if max (seq-take results max) results))
+    
+    ;; Incremental parsing logic
+    (let* ((raw-parsed (auth-source-sops--get-raw-structure))
+           (results nil))
+      ;; Iterate through top-level keys to find potential matches
+      (cl-loop for (key . _value) in raw-parsed
+               until (and max (>= (length results) max))
+               do (let ((parsed-key (auth-source-sops-entry-parse-key key)))
+                    (when (auth-source-sops--match-p (alist-get 'host parsed-key) host)
+                      ;; Only decrypt this branch if it matches the host criteria
+                      (let* ((decrypted-branch (auth-source-sops--extract-branch key))
+                             (branch-parsed (auth-source-sops-parse auth-source-sops-file decrypted-branch))
+                             ;; Wrap in a list because parse-entry expects (cons key branch-parsed)
+                             (exploded (auth-source-sops-parse-entry (cons key branch-parsed)))
+                             (branch-results (thread-last
+                                               exploded
+                                               (cl-remove-if-not (lambda (entry)
+                                                                   (auth-source-sops--entry-matches-criteria-p
+                                                                    entry host user port require)))
+                                               (mapcar (lambda (entry)
+                                                         (auth-source-sops--build-result entry user port))))))
+                        (setq results (append results branch-results))))))
+      (if max (seq-take results max) results))))
 
 (defvar auth-source-sops-backend
   (auth-source-backend
