@@ -1,0 +1,104 @@
+#+TITLE: auth-source-sops
+
+Integrate [[https://getsops.io/][sops]] with Emacs ~auth-source~. This package allows you to store your secrets in encrypted YAML or JSON files and access them seamlessly from Emacs packages that use the standard ~auth-source~ API (like TRAMP, Gnus, etc.).
+
+* Installation & Configuration
+
+** Prerequisites
+
+1. *sops*: Ensure the ~sops~ executable is installed on your system and available in your ~PATH~.
+2. *yaml.el*: This package requires ~yaml.el~ for parsing decrypted data.
+
+** 1. Installation
+
+Clone this repository and add it to your Emacs ~load-path~:
+
+#+begin_src elisp
+(add-to-list 'load-path "/path/to/auth-source-sops")
+(require 'auth-source-sops)
+#+end_src
+
+** 2. Setup
+
+Configure the location of your encrypted secrets file and (optionally) your age key file. Then call ~auth-source-sops-enable~ to register the backend.
+
+#+begin_src elisp
+;; Specify your encrypted secrets file (YAML or JSON)
+(setq auth-source-sops-file "~/.authinfo.sops.yaml")
+
+;; (Optional) Specify a file containing your age private key
+;; This sets the SOPS_AGE_KEY environment variable for the sops process
+(setq auth-source-sops-age-key "~/.config/sops/age/keys.txt")
+
+;; Enable the integration
+(auth-source-sops-enable)
+#+end_src
+
+~auth-source-sops-enable~ will verify that ~sops~ is installed and append ~sops~ to the global ~auth-sources~ list.
+
+** 3. Usage & File Structure
+
+~auth-source-sops~ supports both simple and complex secret structures. You can use either ~.yaml~ or ~.json~ files.
+
+*** YAML Structure
+
+You can use the key of the YAML object to define the host/user/port criteria, or define them explicitly within the value.
+
+**** Simple String (Secret only)
+The key will be parsed for host/user/port components.
+
+#+begin_src yaml
+# Simple host
+github.com: my-secret-token
+
+# User and host
+user@github.com: my-secret-token
+
+# Host and port
+github.com:22: my-ssh-password
+#+end_src
+
+**** Structured Entry (Multiple fields)
+Use a sequence of objects if you need to specify multiple users or specific fields for the same host.
+
+#+begin_src yaml
+api.github.com:
+  - user: apikey
+    secret: my-api-token
+  - user: otheruser
+    secret: other-token
+
+# Mapping 'machine' to 'host' is supported for .netrc compatibility
+database-host:
+  - machine: db.example.com
+    user: postgres
+    port: 5432
+    password: db-password
+#+end_src
+
+*** JSON Structure
+
+The same logic applies to JSON files:
+
+#+begin_src json
+{
+  "github.json": "json-secret",
+  "real-host.com": [
+    {
+      "user": "admin",
+      "secret": "admin-secret"
+    }
+  ]
+}
+#+end_src
+
+** Configuration Options
+
+- ~auth-source-sops-executable~: Path to the ~sops~ executable (defaults to ~"sops"~).
+- ~auth-source-sops-search-method~: 
+    - ~:incremental~ (default): Only decrypts the specific branch of the file matching your search. Best for large files and security.
+    - ~:full~: Decrypts the entire file once and searches locally. Useful if you have many matches or for specialized workflows.
+
+* License
+
+GPLv3

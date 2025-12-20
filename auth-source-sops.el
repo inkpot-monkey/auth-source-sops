@@ -8,7 +8,28 @@
 
 ;;; Commentary:
 
-;; Integrates sops (https://getsops.io/) within auth-source.
+;; This package integrates `sops' (https://getsops.io/) with the Emacs
+;; `auth-source' library. It allows you to store your credentials in
+;; encrypted YAML or JSON files, providing better structure and security
+;; than traditional .netrc files.
+;;
+;; Key features:
+;; - Support for YAML and JSON backends.
+;; - Incremental search: Only decrypts the specific branch of the file needed.
+;; - Full file search: Decrypts the entire file for faster local lookups.
+;; - Automatic mapping of `machine' to `host' and `password' to `secret'.
+;;
+;; Quickstart:
+;;
+;; 1. Configure your secrets file and age key:
+;;    (setq auth-source-sops-file "~/.authinfo.sops.yaml")
+;;    (setq auth-source-sops-age-key "~/.config/sops/age/keys.txt")
+;;
+;; 2. Enable the backend:
+;;    (auth-source-sops-enable)
+;;
+;; 3. Use standard `auth-source-search':
+;;    (auth-source-search :host "my-host" :user "my-user")
 
 ;;; Code:
 (require 'auth-source)
@@ -26,30 +47,41 @@
   :version "30.1")
 
 (defcustom auth-source-sops-executable "sops"
-  "Path to the sops executable."
+  "Path to the sops executable.
+If not absolute, it will be searched for in `exec-path'."
   :type 'string)
 
 (defcustom auth-source-sops-file "~/.authinfo.sops.yaml"
-  "File in which sops credentials are stored."
+  "File in which sops-encrypted credentials are stored.
+The file extension determines the parser used (.yaml or .json)."
   :type 'file)
 
 (defcustom auth-source-sops-age-key nil
-  "A file containing the SOPS_AGE_KEY."
-  :type 'file)
+  "File containing the SOPS_AGE_KEY.
+If set, the content of this file will be used to set the
+SOPS_AGE_KEY environment variable when calling the sops process."
+  :type '(choice (const :tag "None" nil)
+                 file))
 
 (defcustom auth-source-sops-search-method :incremental
-  "Method used to search for credentials.
-- `:incremental`: Decrypt only the necessary branches (more secure).
-- `:full`: Decrypt the entire file and search locally (faster for many matches, used in tests)."
-  :type '(choice (const :incremental)
-                 (const :full)))
+  "Method used to search for credentials in the sops file.
+- `:incremental`: Uses `sops --extract' to decrypt only the specific
+  top-level key that matches the host. This is faster for large files
+  and avoids keeping the entire decrypted file in memory.
+- `:full`: Decrypts the entire file once and searches the resulting
+  structure locally. This may be faster if you have many matches or
+  a small file."
+  :type '(choice (const :tag "Incremental Search" :incremental)
+                 (const :tag "Full Decryption" :full)))
 
 (cl-defun auth-source-sops-search
     (&rest spec &key backend require type max host user port &allow-other-keys)
-  "Given some search query, return matching credentials.
-
-See `auth-source-search' for details on the parameters SPEC, BACKEND, TYPE,
-HOST, USER, PORT, REQUIRE, and MAX."
+  "Main search function for the sops auth-source backend.
+Search for credentials matching SPEC in the configured `auth-source-sops-file'.
+SPEC is a plist as passed to `auth-source-search'.
+BACKEND is the backend object provided by auth-source.
+REQUIRE, TYPE, MAX, HOST, USER, PORT are standard search criteria.
+Returns a list of matching entries (plists)."
   (cl-assert (or (null type) (eq type (oref backend type)))
              t "Invalid sops search: %s %s")
   (cond ((eq host t)
@@ -62,7 +94,9 @@ HOST, USER, PORT, REQUIRE, and MAX."
          (auth-source-sops--multiple-results host user port require max))))
 
 (defun auth-source-sops--match-p (val criteria)
-  "Return non-nil if VAL matches CRITERIA (string, list, or t)."
+  "Return non-nil if VAL matches CRITERIA.
+VAL is the value from the secret file.
+CRITERIA can be a string (matched via regex), a list (matched via `member'), or t."
   (cond
    ((eq criteria t) t)
    ((null criteria) t)
@@ -72,7 +106,11 @@ HOST, USER, PORT, REQUIRE, and MAX."
            (not (not (string-match-p criteria val)))))))
 
 (defun auth-source-sops--entry-matches-criteria-p (entry host user port require)
-  "Check if ENTRY matches search criteria HOST, USER, PORT, and REQUIRE."
+  "Check if a normalized ENTRY matches all search criteria.
+ENTRY is an alist representing a single set of credentials.
+HOST, USER, PORT are the search criteria.
+REQUIRE is a list of keywords (e.g., :secret, :user) that must be present.
+Returns non-nil if all criteria and requirements are met."
   (let ((entry-host (alist-get 'host entry))
         (entry-user (alist-get 'user entry))
         (entry-port (alist-get 'port entry))
@@ -92,15 +130,17 @@ HOST, USER, PORT, REQUIRE, and MAX."
      ;; Required fields check
      (cl-every (lambda (field)
                  (let ((sym-field (if (keywordp field)
-                                      (intern (substring (symbol-name field) 1))
-                                    field)))
+                                       (intern (substring (symbol-name field) 1))
+                                     field)))
                    (if (eq sym-field 'secret)
                        entry-secret
                      (alist-get sym-field entry))))
                require))))
 
 (defun auth-source-sops--build-result (entry user port)
-  "Build a properly formatted result from ENTRY with fallback USER and PORT."
+  "Build a properly formatted auth-source result from normalized ENTRY.
+USER and PORT are used as fallbacks if not present in ENTRY.
+Returns a plist containing :host, :user, :port, and a :secret lambda."
   (let* ((entry-host (cdr (assoc 'host entry)))
          (entry-user (cdr (assoc 'user entry)))
          (entry-port (cdr (assoc 'port entry)))
@@ -112,7 +152,10 @@ HOST, USER, PORT, REQUIRE, and MAX."
           :secret (lambda () (when entry-secret (format "%s" entry-secret))))))
 
 (defun auth-source-sops--find-matching-entries (sops-parsed host user port require)
-  "Find entries in SOPS-PARSED matching HOST, USER, PORT, and REQUIRE."
+  "Find and build results from SOPS-PARSED entries.
+SOPS-PARSED is a list of normalized entries.
+HOST, USER, PORT, REQUIRE are search criteria.
+Returns a list of formatted result plists."
   (let (results)
     (dolist (entry sops-parsed)
       (when (auth-source-sops--entry-matches-criteria-p entry host user port require)
@@ -120,11 +163,14 @@ HOST, USER, PORT, REQUIRE, and MAX."
     (nreverse results)))
 
 (defvar auth-source-sops--raw-cache nil
-  "Internal cache for raw (encrypted) file structure.")
+  "Internal cache for the raw (encrypted) file structure.
+Prevents redundant parsing of large top-level structures in incremental mode.
+Format: (MODIFICATION-TIME . PARSED-STRUCTURE)")
 
 (defun auth-source-sops--get-raw-structure ()
-  "Read the sops file without decryption and return its structure.
-The keys are visible, but values are encrypted strings."
+  "Return the parsed structure of the sops file without full decryption.
+Uses `auth-source-sops--raw-cache' to avoid re-parsing if the file hasn't changed.
+In this state, top-level keys are readable, but values are encrypted strings."
   (if (and auth-source-sops--raw-cache
            (equal (car auth-source-sops--raw-cache)
                   (file-attribute-modification-time (file-attributes auth-source-sops-file))))
@@ -137,7 +183,8 @@ The keys are visible, but values are encrypted strings."
       parsed)))
 
 (defun auth-source-sops--extract-branch (key)
-  "Decrypt only the branch at KEY using sops --extract."
+  "Decrypt only the branch at KEY using `sops --extract'.
+Returns the decrypted branch content as a string."
   (let ((output-buffer (generate-new-buffer " *sops-extract*"))
         (error-buffer (generate-new-buffer " *sops-extract-error*"))
         (process-environment (copy-sequence process-environment))
@@ -169,10 +216,11 @@ The keys are visible, but values are encrypted strings."
       (kill-buffer error-buffer))))
 
 (defun auth-source-sops--multiple-results (host user port &optional require max)
-  "Search the sops file for matching credentials.
-Returns results matching HOST, USER, PORT criteria."
+  "Execute the search using the configured search method.
+HOST, USER, PORT, REQUIRE, MAX are standard search criteria.
+Dispatches to either full decryption or incremental extraction."
   (if (eq auth-source-sops-search-method :full)
-      ;; Original "full decryption" logic
+      ;; Full decryption path
       (let* ((decrypted (auth-source-sops-decrypt))
              (parsed (auth-source-sops-parse auth-source-sops-file decrypted))
              (exploded (mapcan #'auth-source-sops-parse-entry parsed))
@@ -185,7 +233,7 @@ Returns results matching HOST, USER, PORT criteria."
                                   (auth-source-sops--build-result entry user port))))))
         (if max (seq-take results max) results))
     
-    ;; Incremental parsing logic
+    ;; Incremental extraction path
     (let* ((raw-parsed (auth-source-sops--get-raw-structure))
            (results nil))
       ;; Iterate through top-level keys to find potential matches
@@ -196,7 +244,7 @@ Returns results matching HOST, USER, PORT criteria."
                       ;; Only decrypt this branch if it matches the host criteria
                       (let* ((decrypted-branch (auth-source-sops--extract-branch key))
                              (branch-parsed (auth-source-sops-parse auth-source-sops-file decrypted-branch))
-                             ;; Wrap in a list because parse-entry expects (cons key branch-parsed)
+                             ;; Wrap in a single entry for parse-entry
                              (exploded (auth-source-sops-parse-entry (cons key branch-parsed)))
                              (branch-results (thread-last
                                                exploded
@@ -213,13 +261,15 @@ Returns results matching HOST, USER, PORT criteria."
    :source "."
    :type 'sops
    :search-function #'auth-source-sops-search)
-  "Auth-source backend for sops.")
+  "Auth-source backend definition for sops.")
 
 (defun auth-source-sops-backend-parse (entry)
-  "Create a sops auth-source backend from ENTRY."
+  "Backend parser for `auth-source-sops'.
+ENTRY is the backend identifier (must be the symbol `sops')."
   (when (eq entry 'sops)
     (auth-source-backend-parse-parameters entry auth-source-sops-backend)))
 
+;; Register the parser with auth-source
 (if (boundp 'auth-source-backend-parser-functions)
     (add-hook 'auth-source-backend-parser-functions #'auth-source-sops-backend-parse)
   (advice-add 'auth-source-backend-parse :before-until #'auth-source-sops-backend-parse))
@@ -227,26 +277,27 @@ Returns results matching HOST, USER, PORT criteria."
 
 
 (defun auth-source-sops-get-string-from-file (file-path)
-  "Return file content of FILE-PATH as string."
+  "Return content of FILE-PATH as a string."
   (with-temp-buffer
     (insert-file-contents file-path)
     (buffer-string)))
 
 (defun auth-source-sops--file-modes (file)
-  "Return file modes for FILE. Wrapper around `file-modes'."
+  "Return file permission modes for FILE."
   (file-modes file))
 
 (defun auth-source-sops--check-permissions (file)
-  "Check if FILE has secure permissions (0600).
-Warn if permissions are too open."
+  "Verify that FILE has secure permissions (0600).
+Warns if the file is group or world readable/writable."
   (let ((modes (auth-source-sops--file-modes file)))
     (when (and modes (> (logand modes #o077) 0))
       (warn "File %s has insecure permissions %o. Should be 0600." file modes))))
 
 (defun auth-source-sops-decrypt ()
-  "Decrypt the sops-encrypted auth file and return its contents as a string.
-If `auth-source-sops-age-key' is set, use it to set the SOPS_AGE_KEY
-environment variable before decryption."
+  "Decrypt the entire auth file and return its contents.
+Uses `auth-source-sops-executable'. Sets SOPS_AGE_KEY if
+`auth-source-sops-age-key' is configured.
+Returns the decrypted contents as a string."
   (let ((process-environment (copy-sequence process-environment)))
     (when (file-exists-p auth-source-sops-file)
       (auth-source-sops--check-permissions auth-source-sops-file))
@@ -266,7 +317,7 @@ environment variable before decryption."
                            :name "sops-decrypt"
                            :buffer output-buffer
                            :stderr error-buffer
-                           :connection-type 'pipe  ; Use pipe to avoid PTY issues
+                           :connection-type 'pipe
                            :command (list auth-source-sops-executable "decrypt" auth-source-sops-file)
                            :sentinel (lambda (p _e)
                                        (when (if (fboundp 'process-live-p)
@@ -275,7 +326,6 @@ environment variable before decryption."
                                          (setq exit-code (process-exit-status p))
                                          (setq proc-done t))))))
                   (set-process-query-on-exit-flag proc nil)
-                  ;; Also handle the stderr pipe process if it exists
                   (let ((stderr-proc (get-buffer-process error-buffer)))
                     (when (processp stderr-proc)
                       (set-process-query-on-exit-flag stderr-proc nil)))
@@ -291,33 +341,29 @@ environment variable before decryption."
                 (error "Sops decryption failed with exit code %s: %s"
                        exit-code (with-current-buffer error-buffer (buffer-string))))
               (with-current-buffer output-buffer (buffer-string)))
-          ;; Cleanup
-          (when (get-buffer-process output-buffer)
-            (delete-process (get-buffer-process output-buffer)))
           (kill-buffer output-buffer)
           (kill-buffer error-buffer))))))
 
 (defun auth-source-sops-parse (file output)
-  "Parse decrypted sops OUTPUT based on FILE extension."
+  "Parse decrypted sops OUTPUT string based on FILE extension.
+Currently supports .yaml and .json files."
   (cond ((string-suffix-p ".yaml" file)
          (yaml-parse-string output :object-type 'alist :object-key-type 'string))
         ((string-suffix-p ".json" file)
          (json-parse-string output :object-type 'alist :array-type 'array))
-        (t (error "File parser not implemented"))))
+        (t (error "File parser not implemented for %s" file))))
 
 (defun auth-source-sops-get (key entry)
-  "Get value for KEY from parsed sops ENTRY.
-KEY is a symbol representing the field to retrieve (e.g. `user', `host').
-ENTRY is a cons cell containing the raw sops entry data."
+  "Retrieve value for KEY from a raw sops ENTRY.
+KEY is a symbol (e.g., 'user, 'host).
+This is a convenience function for manual extraction."
   (let ((data (auth-source-sops-parse-entry entry)))
-    (cdr (assoc key data))))
+    (cdr (assoc key (car data)))))
 
 (defun auth-source-sops-parse-entry (entry)
-  "Parse ENTRY into a normalized list of alists of credential data.
-ENTRY should be a cons cell where car is the key (e.g. user@host:port)
-and cdr is the value containing secret data.
-Returns a list of alists containing parsed components (host, user, port)
-merged with the secret data and original key."
+  "Normalize a raw sops ENTRY into a list of constituent credential alists.
+ENTRY is a cons cell (KEY-STRING . VALUE).
+Handles 'exploding' the key and normalizing sequence values."
   (let* ((key (car entry))
          (parsed-key (auth-source-sops-entry-parse-key key))
          (values (auth-source-sops-entry-parse-value (cdr entry))))
@@ -326,32 +372,21 @@ merged with the secret data and original key."
             values)))
 
 (defun auth-source-sops-entry-parse-key (key)
-  "Parse KEY into host, user, and port components.
-Supports standard auth-source formats:
- - host
- - user@host
- - host:port
- - user@host:port
- - user@email.com@host
- - user@email.com@host:port (only if port is numeric)"
+  "Parse a sops KEY string into host, user, and port components.
+Supports common formats like user@host, host:port, etc."
   (let* ((key-str (format "%s" key))
          (host nil)
          (user nil)
          (port nil))
-    ;; Extract port if present (must be at end of string, preceded by colon)
     (if (string-match ":\\([0-9]+\\)$" key-str)
         (progn
           (setq port (string-to-number (match-string 1 key-str)))
-          ;; Remove port from key-str for further parsing
           (setq key-str (substring key-str 0 (match-beginning 0)))))
     
-    ;; Extract user and host
-    ;; Greedy match ensures everything before the LAST @ is captured as user
     (if (string-match "^\\(.*\\)@\\([^@]+\\)$" key-str)
         (progn
           (setq user (match-string 1 key-str))
           (setq host (match-string 2 key-str)))
-      ;; No @ found, entire string is host
       (setq host key-str))
     
     `((host . ,host)
@@ -359,8 +394,9 @@ Supports standard auth-source formats:
       (port . ,port))))
 
 (defun auth-source-sops-entry-parse-value (value)
-  "Extract sequence items from VALUE.
-Returns a list of alists."
+  "Normalize the VALUE part of a sops entry.
+If VALUE is a list/vector, it is treated as multiple credential sets.
+Keys like 'machine' and 'password' are normalized."
   (if (and (vectorp value) (> (length value) 0))
       (cl-loop for item across value
                collect (cl-loop for pair in item
@@ -370,15 +406,16 @@ Returns a list of alists."
                                 collect (cons (let ((key-str (if (symbolp key-unparsed)
                                                                 (symbol-name key-unparsed)
                                                               (format "%s" key-unparsed))))
-                                                (if (string-equal key-str "machine")
-                                                    'host
-                                                  (intern key-str)))
+                                                (cond ((string-equal key-str "machine") 'host)
+                                                      ((string-equal key-str "password") 'secret)
+                                                      (t (intern key-str))))
                                               val)))
     (list (list (cons 'secret value)))))
 
 ;;;###autoload
 (defun auth-source-sops-enable ()
-  "Enable auth-source-sops."
+  "Register the sops backend with `auth-source'.
+Checks for the sops executable and adds `sops' to `auth-sources'."
   (if (executable-find auth-source-sops-executable)
       (progn
         (add-to-list 'auth-sources 'sops)
