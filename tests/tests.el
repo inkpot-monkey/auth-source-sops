@@ -170,3 +170,20 @@ repro-sudo:
       (should (equal (funcall (plist-get result :secret)) "sudo-password")))))
 
 ;;; auth-source-sops-test.el ends here
+
+(ert-deftest auth-source-sops-exit-code-test ()
+  "Test that decryption fails if sops exit code is non-zero."
+  ;; Mock call-process to return 1 (error)
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (&rest args) 1)))
+    (should-error (auth-source-sops-decrypt))))
+
+(ert-deftest auth-source-sops-cached-secret-test ()
+  "Test that secret is cached and doesn't trigger decryption again."
+  (let* ((result (car (auth-source-search :host "github")))
+         (secret-fn (plist-get result :secret)))
+    ;; Now mock decrypt to FAIL. If it calls it, it will error.
+    (cl-letf (((symbol-function 'auth-source-sops-decrypt)
+               (lambda () (error "Should not be called"))))
+      (should (equal (funcall secret-fn) "1")))))
+

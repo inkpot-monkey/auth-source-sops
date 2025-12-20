@@ -12,6 +12,7 @@
 
 ;;; Code:
 (require 'auth-source)
+(require 'cl-lib)
 (require 'yaml)
 
 (defgroup auth-source-sops nil
@@ -83,19 +84,13 @@ HOST, USER, PORT, REQUIRE, and MAX."
   "Build a properly formatted result from ENTRY with fallback USER and PORT."
   (let ((entry-host (alist-get 'host entry))
         (entry-user (alist-get 'user entry))
-        (entry-port (alist-get 'port entry)))
+        (entry-port (alist-get 'port entry))
+        (entry-secret (or (alist-get 'secret entry)
+                          (alist-get 'password entry))))
     (list :host entry-host
           :user (or entry-user user)
           :port (or entry-port port)
-          :secret (lambda ()
-                    (let* ((key (alist-get 'key entry))
-                           (sops-output (auth-source-sops-decrypt))
-                           (sops-data (auth-source-sops-parse auth-source-sops-file sops-output))
-                           (entry (assoc key sops-data))
-                           (data (auth-source-sops-parse-entry entry))
-                           (secret (or (alist-get 'secret data)
-                                       (alist-get 'password data))))
-                      (format "%s" secret))))))
+          :secret (lambda () (format "%s" entry-secret)))))
 
 (defun auth-source-sops--find-matching-entries (sops-parsed host user port require)
   "Find entries in SOPS-PARSED matching HOST, USER, PORT, and REQUIRE."
@@ -153,9 +148,12 @@ environment variable before decryption."
     (with-temp-buffer
       (when auth-source-sops-age-key
         (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
-      (call-process auth-source-sops-executable nil t nil
-                    "decrypt" auth-source-sops-file)
-      (buffer-string))))
+      (let ((exit-code (call-process auth-source-sops-executable nil t nil
+                                     "decrypt" auth-source-sops-file)))
+        (unless (zerop exit-code)
+          (error "Sops decryption failed with exit code %d: %s"
+                 exit-code (buffer-string)))
+        (buffer-string)))))
 
 (defun auth-source-sops-parse (file output)
   "Parse decrypted sops OUTPUT based on FILE extension.
