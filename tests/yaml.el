@@ -1,19 +1,26 @@
+;;; yaml.el --- Mock YAML parser for tests -*- lexical-binding: t -*-
+
 (provide 'yaml)
 
-(defun yaml-parse-string (string &rest args)
+(defun yaml-parse-string (string &rest _args)
   "Mock yaml-parse-string for testing."
   (cond
    ((string-match-p "repro-machine" string)
     '(("repro-machine" . [ (("machine" . "machine.example.com") ("password" . "secure")) ])))
    ((string-match-p "repro-sudo" string)
     '(("repro-sudo" . [ (("host" . "sudo-host") ("port" . "sudo") ("user" . "root") ("password" . "sudo-password")) ])))
-   ((string-match-p "me@email.com" string)
-    '(("me@email.com@complex-host:99" . [ (("password" . 99)) ])))
-   ((string-match-p "multiple-users" string)
-    '(("multiple-users" . [ (("user" . "user1") ("password" . "pass1"))
-                            (("user" . "user2") ("password" . "pass2")) ])))
    ((string-match-p "malformed" string)
     (error "YAML parsing error"))
+   ((string-equal "user: apikey\nsecret: 6" string)
+    '((user . "apikey") (secret . "6")))
+   ((string-equal "user: override\nsecret: 7" string)
+    '((user . "override") (secret . "7")))
+   ((string-equal "example-secret" string)
+    "example-secret")
+   ((string-match-p "^[0-9]+$" string)
+    (string-to-number string))
+   ((and (not (string-match-p ":" string)) (not (string-match-p "\n" string)))
+    string)
    (t
     '(("github" . "1")
       ("github.com" . "2")
@@ -23,5 +30,11 @@
       ("api.github.com" . [ (("user" . "apikey") ("secret" . "6")) ])
       ("origin@api.github.com" . [ (("user" . "override") ("secret" . "7")) ])
       ("nested" . [ (("user" . "example") ("secret" . "8") ("test" . (("deep" . 1)))) ])
-      ("me@email.com@complex-host:123" . "99")
-    ))))
+      ("db.yaml:5432" . [ (("user" . "postgres") ("secret" . "db-secret-yaml")) ])
+      ("machine-yaml-alias" . [ (("machine" . "real-host.yaml") ("user" . "admin") ("secret" . "admin-secret-yaml")) ])
+      ("multiple@yaml-host" . [ (("port" . 80) ("secret" . "p80-yaml"))
+                                (("port" . 443) ("secret" . "p443-yaml")) ])
+      ("me@email.com@complex-host:99" . "99")
+      ("me@email.com@complex-host:123" . "99")))))
+
+;;; yaml.el ends here
