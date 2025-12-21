@@ -1,0 +1,65 @@
+#+TITLE: Contributing to auth-source-sops
+
+Thank you for your interest in contributing to =auth-source-sops=! Contributions are welcome and appreciated.
+
+* How to Contribute
+
+** Reporting Bugs
+
+If you find a bug, please open an issue on GitHub. Include:
+- Your Emacs version.
+- Your =auth-source-sops= configuration.
+- Steps to reproduce the issue.
+- Expected vs. actual behavior.
+
+** Proposing Enhancements
+
+Feature requests are welcome. Please open an issue to discuss your ideas before implementing them.
+
+** Development Setup
+
+This project uses [[https://github.com/alphapapa/makem.sh][makem.sh]] to simplify building, linting, and testing.
+
+*** Requirements
+- Emacs 28.1 or later.
+- =sops= executable.
+- =bash= (for running =makem.sh=).
+
+*** Running Linters and Tests
+Before submitting a pull request, please ensure that all linters and tests pass:
+
+#+begin_src bash
+# Run all linters and tests in a sandbox
+./makem.sh -vv --sandbox all
+#+end_src
+
+You can also run specific rules:
+#+begin_src bash
+# Run only tests
+./makem.sh -vv --sandbox test
+
+# Run only linters
+./makem.sh -vv --sandbox lint
+#+end_src
+
+* Standards
+
+** Code Style
+- Use standard Emacs Lisp indentation.
+- We use =apheleia= or =indent-region= to maintain consistent formatting.
+- CI enforces indentation via =makem.sh lint-indent=.
+
+** Documentation
+- All functions and variables should have descriptive docstrings.
+- Follow the [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Documentation-Tips.html][Emacs Lisp Documentation Tips]].
+
+** Commit Messages
+- Use clear, descriptive commit messages.
+- Reference issues where appropriate.
+
+* Releasing
+
+This project uses automated Git tagging. To release a new version:
+1. Update the =;; Version:= header in =auth-source-sops.el=.
+2. Push or merge the change to the =main= branch.
+3. The CI workflow will automatically create and push a new Git tag (e.g., =v1.0.1=) if the tests pass and the tag does not already exist.
