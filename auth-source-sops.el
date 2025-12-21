@@ -130,8 +130,8 @@ Returns non-nil if all criteria and requirements are met."
      ;; Required fields check
      (cl-every (lambda (field)
                  (let ((sym-field (if (keywordp field)
-                                       (intern (substring (symbol-name field) 1))
-                                     field)))
+                                      (intern (substring (symbol-name field) 1))
+                                    field)))
                    (if (eq sym-field 'secret)
                        entry-secret
                      (alist-get sym-field entry))))
@@ -226,13 +226,12 @@ Dispatches to either full decryption or incremental extraction."
       (let* ((decrypted (auth-source-sops-decrypt))
              (parsed (auth-source-sops-parse auth-source-sops-file decrypted))
              (exploded (mapcan #'auth-source-sops-parse-entry parsed))
-             (results (thread-last
-                        exploded
-                        (cl-remove-if-not (lambda (entry)
-                                            (auth-source-sops--entry-matches-criteria-p
-                                             entry host user port require)))
-                        (mapcar (lambda (entry)
-                                  (auth-source-sops--build-result entry user port))))))
+             (results (mapcar (lambda (entry)
+                                (auth-source-sops--build-result entry user port))
+                              (cl-remove-if-not (lambda (entry)
+                                                  (auth-source-sops--entry-matches-criteria-p
+                                                   entry host user port require))
+                                                exploded))))
         (if max (seq-take results max) results))
     
     ;; Incremental extraction path
@@ -248,13 +247,12 @@ Dispatches to either full decryption or incremental extraction."
                              (branch-parsed (auth-source-sops-parse auth-source-sops-file decrypted-branch))
                              ;; Wrap in a single entry for parse-entry
                              (exploded (auth-source-sops-parse-entry (cons key branch-parsed)))
-                             (branch-results (thread-last
-                                               exploded
-                                               (cl-remove-if-not (lambda (entry)
-                                                                   (auth-source-sops--entry-matches-criteria-p
-                                                                    entry host user port require)))
-                                               (mapcar (lambda (entry)
-                                                         (auth-source-sops--build-result entry user port))))))
+                             (branch-results (mapcar (lambda (entry)
+                                                       (auth-source-sops--build-result entry user port))
+                                                     (cl-remove-if-not (lambda (entry)
+                                                                         (auth-source-sops--entry-matches-criteria-p
+                                                                          entry host user port require))
+                                                                       exploded))))
                         (setq results (append results branch-results))))))
       (if max (seq-take results max) results))))
 
@@ -323,21 +321,21 @@ Returns the decrypted contents as a string."
                            :command (list auth-source-sops-executable "decrypt" auth-source-sops-file)
                            :sentinel (lambda (p _e)
                                        (when (if (fboundp 'process-live-p)
-                                                  (not (process-live-p p))
-                                                (memq (process-status p) '(exit signal failed)))
+                                                 (not (process-live-p p))
+                                               (memq (process-status p) '(exit signal failed)))
                                          (setq exit-code (process-exit-status p))
                                          (setq proc-done t))))))
-                  (set-process-query-on-exit-flag proc nil)
-                  (let ((stderr-proc (get-buffer-process error-buffer)))
-                    (when (processp stderr-proc)
-                      (set-process-query-on-exit-flag stderr-proc nil)))
-                  
-                  (let ((start-time (float-time)))
-                    (while (not proc-done)
-                      (accept-process-output proc 0.1)
-                      (when (> (- (float-time) start-time) 10.0) ;; 10 second timeout
-                        (delete-process proc)
-                        (error "Sops decryption timed out after 10 seconds")))))
+                (set-process-query-on-exit-flag proc nil)
+                (let ((stderr-proc (get-buffer-process error-buffer)))
+                  (when (processp stderr-proc)
+                    (set-process-query-on-exit-flag stderr-proc nil)))
+
+                (let ((start-time (float-time)))
+                  (while (not proc-done)
+                    (accept-process-output proc 0.1)
+                    (when (> (- (float-time) start-time) 10.0) ;; 10 second timeout
+                      (delete-process proc)
+                      (error "Sops decryption timed out after 10 seconds")))))
               
               (unless (zerop exit-code)
                 (error "Sops decryption failed with exit code %s: %s"
@@ -406,8 +404,8 @@ Keys like `machine' and `password' are normalized."
                                 for val = (cdr pair)
                                 when (or (stringp val) (numberp val))
                                 collect (cons (let ((key-str (if (symbolp key-unparsed)
-                                                                (symbol-name key-unparsed)
-                                                              (format "%s" key-unparsed))))
+                                                                 (symbol-name key-unparsed)
+                                                               (format "%s" key-unparsed))))
                                                 (cond ((string-equal key-str "machine") 'host)
                                                       ((string-equal key-str "password") 'secret)
                                                       (t (intern key-str))))
