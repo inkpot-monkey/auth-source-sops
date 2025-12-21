@@ -91,7 +91,11 @@ Returns a list of matching entries (plists)."
          ;; Do not build a result, as none will match when HOST is nil
          nil)
         (t
-         (auth-source-sops--multiple-results host user port require max))))
+         (let ((results (auth-source-sops--multiple-results host user port require max)))
+           (if (and (null results) (plist-get spec :create))
+               (let ((created (auth-source-sops--do-create spec)))
+                 (if created (list created) nil))
+             results)))))
 
 (defun auth-source-sops--match-p (val criteria)
   "Return non-nil if VAL matches CRITERIA.
@@ -422,6 +426,61 @@ Checks for the sops executable and adds `sops' to `auth-sources'."
         (add-to-list 'auth-sources 'sops)
         (auth-source-forget-all-cached))
     (user-error "Could not find sops executable at %s" auth-source-sops-executable)))
+
+(defun auth-source-sops--do-create (spec)
+  "Create a new secret entry based on SPEC.
+Prompts the user for missing information."
+  (let* ((host (plist-get spec :host))
+         (user (plist-get spec :user))
+         (port (plist-get spec :port))
+         ;; Use standard format to prompt for missing data
+         (user (or user (read-string (format "User for %s: " host))))
+         (secret (read-passwd (format "Password for %s@%s: " user host)))
+         (port (or port (let ((p (read-string (format "Port for %s: " host))))
+                          (if (string-empty-p p) nil p))))
+         (entry `((user . ,user) (secret . ,secret))))
+    (when port
+      (setq entry (append entry `((port . ,port)))))
+    
+    (if (auth-source-sops--save-entry host entry)
+        (list :host host :user user :port port :secret (lambda () secret))
+      nil)))
+
+(defun auth-source-sops--save-entry (host entry)
+  "Save ENTRY for HOST into the sops file.
+ENTRY is an alist.  Uses `sops --set'."
+  (let* ((raw-parsed (auth-source-sops--get-raw-structure))
+         (existing (assoc host raw-parsed))
+         (new-values nil))
+    ;; If it already exists, we might have multiple entries.
+    ;; Incremental mode might have extracted it, but we need the whole list for the host.
+    (if existing
+        (let* ((decrypted-branch (auth-source-sops--extract-branch host))
+               (branch-parsed (auth-source-sops-parse auth-source-sops-file decrypted-branch)))
+          ;; branch-parsed is either a list (yaml sequence) or a single map
+          (setq new-values (if (vectorp branch-parsed)
+                               (append (append branch-parsed nil) (list entry))
+                             (list branch-parsed entry))))
+      (setq new-values (list entry)))
+    
+    ;; Use sops --set to update the host
+    (let ((json-payload (json-encode new-values))
+          (error-buffer (generate-new-buffer " *sops-set-error*"))
+          (exit-code nil))
+      (unwind-protect
+          (progn
+            (when auth-source-sops-age-key
+              (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
+            (setq exit-code
+                  (call-process auth-source-sops-executable nil (list t error-buffer) nil
+                                "set" (format "[\"%s\"]" host) json-payload
+                                auth-source-sops-file))
+            (if (zerop exit-code)
+                (progn
+                  (setq auth-source-sops--raw-cache nil)
+                  t)
+              (error "Sops set failed: %s" (with-current-buffer error-buffer (buffer-string)))))
+        (kill-buffer error-buffer)))))
 
 (provide 'auth-source-sops)
 
