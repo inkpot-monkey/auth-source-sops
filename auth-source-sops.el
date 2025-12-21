@@ -9,14 +9,15 @@
 ;;; Commentary:
 
 ;; This package integrates `sops' (https://getsops.io/) with the Emacs
-;; `auth-source' library. It allows you to store your credentials in
+;; `auth-source' library.  It allows you to store your credentials in
 ;; encrypted YAML or JSON files, providing better structure and security
 ;; than traditional .netrc files.
 ;;
 ;; Key features:
 ;; - Support for YAML and JSON backends.
-;; - Incremental search: Only decrypts the specific branch of the file needed.
-;; - Full file search: Decrypts the entire file for faster local lookups.
+;; - `:incremental` (default): Only decrypt the specific branch matching the host.
+;; - `:full`: Decrypts the entire file and search locally.  Faster for multiple
+;;   lookups in small files.
 ;; - Automatic mapping of `machine' to `host' and `password' to `secret'.
 ;;
 ;; Quickstart:
@@ -47,7 +48,7 @@
 
 (defcustom auth-source-sops-executable "sops"
   "Path to the sops executable.
-If not absolute, it will be searched for in `exec-path'."
+If not absolute, it will be searched for in the variable `exec-path'."
   :type 'string)
 
 (defcustom auth-source-sops-file "~/.authinfo.sops.yaml"
@@ -65,10 +66,10 @@ SOPS_AGE_KEY environment variable when calling the sops process."
 (defcustom auth-source-sops-search-method :incremental
   "Method used to search for credentials in the sops file.
 - `:incremental`: Uses `sops --extract' to decrypt only the specific
-  top-level key that matches the host. This is faster for large files
+  top-level key that matches the host.  This is faster for large files
   and avoids keeping the entire decrypted file in memory.
 - `:full`: Decrypts the entire file once and searches the resulting
-  structure locally. This may be faster if you have many matches or
+  structure locally.  This may be faster if you have many matches or
   a small file."
   :type '(choice (const :tag "Incremental Search" :incremental)
                  (const :tag "Full Decryption" :full)))
@@ -200,7 +201,7 @@ Returns the decrypted branch content as a string."
                        :name "sops-extract"
                        :buffer output-buffer
                        :stderr error-buffer
-                       :command (list auth-source-sops-executable "decrypt" 
+                       :command (list auth-source-sops-executable "decrypt"
                                       "--extract" (format "[\"%s\"]" key)
                                       auth-source-sops-file)
                        :sentinel (lambda (p _e)
@@ -212,7 +213,7 @@ Returns the decrypted branch content as a string."
               (accept-process-output proc 0.1))
             (if (zerop exit-code)
                 (with-current-buffer output-buffer (buffer-string))
-              (error "Sops extract failed: %s" 
+              (error "Sops extract failed: %s"
                      (with-current-buffer error-buffer (buffer-string))))))
       (kill-buffer output-buffer)
       (kill-buffer error-buffer))))
@@ -295,7 +296,7 @@ Warns if the file is group or world readable/writable."
 
 (defun auth-source-sops-decrypt ()
   "Decrypt the entire auth file and return its contents.
-Uses `auth-source-sops-executable'. Sets SOPS_AGE_KEY if
+Uses `auth-source-sops-executable'.  Sets SOPS_AGE_KEY if
 `auth-source-sops-age-key' is configured.
 Returns the decrypted contents as a string."
   (let ((process-environment (copy-sequence process-environment)))
@@ -425,3 +426,7 @@ Checks for the sops executable and adds `sops' to `auth-sources'."
 (provide 'auth-source-sops)
 
 ;;; auth-source-sops.el ends here
+
+;; Local Variables:
+;; ispell-buffer-session-localwords: ("auth" "yaml" "json" "plist" "regex" "plists" "alists" "sops" "fallbacks" "normalized" "decrypt" "decrypted" "backend" "normalize" "normalizing" "fallback" "parser" "decrypts")
+;; End:
