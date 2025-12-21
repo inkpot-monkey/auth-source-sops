@@ -4,7 +4,7 @@
 ;; Version: 1.0.0
 ;; Created: 22 Jun 2025
 ;; URL: https://github.com/inkpot-monkey/auth-source-sops
-;; Package-Requires: ((emacs "25.1") (yaml "0.5.1"))
+;; Package-Requires: ((emacs "28.1") (yaml "0.5.1"))
 
 ;;; Commentary:
 
@@ -43,8 +43,7 @@
 (defgroup auth-source-sops nil
   "Sops integration within auth-source."
   :prefix "auth-source-sops-"
-  :group 'auth-source
-  :version "30.1")
+  :group 'auth-source)
 
 (defcustom auth-source-sops-executable "sops"
   "Path to the sops executable.
