@@ -329,7 +329,7 @@ Returns the decrypted contents as a string."
                 (let ((stderr-proc (get-buffer-process error-buffer)))
                   (when (processp stderr-proc)
                     (set-process-query-on-exit-flag stderr-proc nil)))
-
+                
                 (let ((start-time (float-time)))
                   (while (not proc-done)
                     (accept-process-output proc 0.1)
@@ -423,8 +423,5 @@ Checks for the sops executable and adds `sops' to `auth-sources'."
     (user-error "Could not find sops executable at %s" auth-source-sops-executable)))
 
 (provide 'auth-source-sops)
-;;; auth-source-sops.el ends here
 
-;; Local Variables:
-;; ispell-buffer-session-localwords: ("auth" "yaml")
-;; End:
+;;; auth-source-sops.el ends here
