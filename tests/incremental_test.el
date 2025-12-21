@@ -1,4 +1,4 @@
-(require 'ert)
+;;; tests/incremental_test.el --- Incremental search tests -*- lexical-binding: t; no-byte-compile: t; -*-
 (require 'auth-source-sops "./auth-source-sops.el")
 
 (ert-deftest auth-source-sops-incremental-extraction-test ()
@@ -10,7 +10,7 @@
                ((symbol-function 'auth-source-sops-decrypt)
                 (lambda () (error "This should NOT be called in incremental mode")))
                ((symbol-function 'auth-source-sops-parse)
-                (lambda (file output)
+                (lambda (_file output)
                   (cond
                    ((string-match-p "ENC" output) ; Raw encrypted structure
                     '(("github" . "enc")
@@ -34,23 +34,22 @@
                           (insert (if (string-match "api" key)
                                       "user: apikey\nsecret: 6"
                                     "example-secret"))))
-                      (funcall (plist-get args :sentinel) 'fake-proc "finished\n")
-                      'fake-proc)))))
-      
-      (auth-source-sops-enable)
-      (setq auth-source-sops-file "/fake/path.yaml")
-      ;; Clear cache
-      (setq auth-source-sops--raw-cache nil)
-      
-      (let ((results (auth-source-search :host "github" :max 1)))
-        (should (= (length results) 1))
-        (should (equal (plist-get (car results) :host) "github"))
-        (should (= extract-calls 1)))
-      
-      (let ((results (auth-source-search :host "api.github.com" :max 2)))
-        (should (= (length results) 2))
-        (should (equal (plist-get (car results) :host) "api.github.com"))
-        (should (= extract-calls 3))))))
+                      (funcall (plist-get args :sentinel) 'fake-proc "finished\n"))
+                    'fake-proc))))
+      (let ((auth-source-sops-file "/fake/path.yaml")
+            (auth-source-sops-search-method :incremental)
+            (auth-source-sops--raw-cache nil))
+        (auth-source-sops-enable)
+        
+        (let ((results (auth-source-search :host "github" :max 1)))
+          (should (= (length results) 1))
+          (should (equal (plist-get (car results) :host) "github"))
+          (should (= extract-calls 1)))
+        
+        (let ((results (auth-source-search :host "api.github.com" :max 2)))
+          (should (= (length results) 2))
+          (should (equal (plist-get (car results) :host) "api.github.com"))
+          (should (= extract-calls 3)))))))
 
 (ert-deftest auth-source-sops-incremental-wildcard-test ()
   "Verify that wildcard searches extract multiple matching branches."
@@ -78,15 +77,14 @@
                               "secret: host1-val")))
                   (funcall (plist-get args :sentinel) 'fake-proc "finished\n")
                   'fake-proc)))
-      
-      (auth-source-sops-enable)
-      (setq auth-source-sops-file "/fake/path.yaml")
-      (setq auth-source-sops--raw-cache nil)
-      
-      ;; Search for host matching "host.*"
-      (let ((results (auth-source-search :host "host." :max 2)))
-        (should (= (length results) 2))
-        (should (= extract-calls 2))))))
+      (let ((auth-source-sops-file "/fake/path.yaml")
+            (auth-source-sops-search-method :incremental)
+            (auth-source-sops--raw-cache nil))
+        (auth-source-sops-enable)
+        ;; Search for host matching "host.*"
+        (let ((results (auth-source-search :host "host." :max 2)))
+          (should (= (length results) 2))
+          (should (= extract-calls 2)))))))
 
 (ert-deftest auth-source-sops-incremental-cache-test ()
   "Verify that raw structure is cached."
@@ -94,18 +92,17 @@
     (cl-letf* (((symbol-function 'auth-source-sops-get-string-from-file)
                 (lambda (_path) (setq read-calls (1+ read-calls)) "key: enc"))
                ((symbol-function 'auth-source-sops-parse) (lambda (&rest _) '(("host" . "enc"))))
-               ((symbol-function 'file-attributes) (lambda (_) '((0 0 0 0))))) ; Mock mod time
-      
-      (setq auth-source-sops--raw-cache nil)
-      (setq auth-source-sops-file "/fake/path.yaml")
-      
-      ;; First call
-      (auth-source-sops--get-raw-structure)
-      (should (= read-calls 1))
-      
-      ;; Second call - should use cache
-      (auth-source-sops--get-raw-structure)
-      (should (= read-calls 1)))))
+               ((symbol-function 'file-attributes) (lambda (_) '((0 0 0 0)))))
+      (let ((auth-source-sops-file "/fake/path.yaml")
+            (auth-source-sops-search-method :incremental)
+            (auth-source-sops--raw-cache nil))
+        ;; First call
+        (auth-source-sops--get-raw-structure)
+        (should (= read-calls 1))
+        
+        ;; Second call - should use cache
+        (auth-source-sops--get-raw-structure)
+        (should (= read-calls 1))))))
 
 (ert-deftest auth-source-sops-incremental-json-test ()
   "Verify that incremental parsing works with JSON files."
@@ -137,14 +134,13 @@
                               "{\"secret\": \"json-val2\"}")))
                   (funcall (plist-get args :sentinel) 'fake-proc "finished\n")
                   'fake-proc)))
-      
-      (auth-source-sops-enable)
-      (setq auth-source-sops-file "/fake/path.json")
-      (setq auth-source-sops--raw-cache nil)
-      
-      (let ((results (auth-source-search :host "host1")))
-        (should (= (length results) 1))
-        (should (equal (funcall (plist-get (car results) :secret)) "json-val1"))
-        (should (= extract-calls 1))))))
+      (let ((auth-source-sops-file "/fake/path.json")
+            (auth-source-sops-search-method :incremental)
+            (auth-source-sops--raw-cache nil))
+        (auth-source-sops-enable)
+        (let ((results (auth-source-search :host "host1")))
+          (should (= (length results) 1))
+          (should (equal (funcall (plist-get (car results) :secret)) "json-val1"))
+          (should (= extract-calls 1)))))))
 
 (provide 'incremental-test)
