@@ -1,8 +1,6 @@
-;;; yaml.el --- Mock YAML parser for tests -*- lexical-binding: t -*-
+(provide 'mock-yaml)
 
-(provide 'yaml)
-
-(defun yaml-parse-string (string &rest _args)
+(defun mock-yaml-parse-string (string &rest _args)
   "Mock yaml-parse-string for testing."
   (cond
    ((string-match-p "repro-machine" string)
@@ -37,4 +35,4 @@
       ("me@email.com@complex-host:99" . "99")
       ("me@email.com@complex-host:123" . "99")))))
 
-;;; yaml.el ends here
+;;; mock-yaml.el ends here

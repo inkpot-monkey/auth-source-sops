@@ -10,6 +10,8 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
+(require 'mock-yaml (expand-file-name "mock-yaml.el" current-dir))
+(defalias 'yaml-parse-string 'mock-yaml-parse-string)
 
 (setq auth-source-sops-search-method :full)
 
@@ -36,12 +38,14 @@
      ,@body))
 
 ;; Decrypt test
+(unless (getenv "SOPS_TEST_REAL_YAML")
 (ert-deftest auth-source-sops-decrypt-yaml-test ()
   "Test decrypting a sops yaml file."
   (should (equal
            (auth-source-sops-decrypt)
            (remove-escaped-quotes
             (auth-source-sops-get-string-from-file auth-source-unencrypted-sops-file)))))
+)
 
 ;; Search tests
 (ert-deftest auth-source-sops-search-basic-test ()
@@ -328,6 +332,7 @@ repro-sudo:
      (should (equal (plist-get result :user) "me@email.com"))
      (should (equal (plist-get result :port) 99))
      (should (equal (funcall (plist-get result :secret)) "99")))))
+
 
 (provide 'tests)
 ;;; auth-source-sops-test.el ends here

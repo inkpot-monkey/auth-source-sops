@@ -1,6 +1,8 @@
 ;;; tests/incremental_test.el --- Incremental search tests -*- lexical-binding: t; no-byte-compile: t; -*-
 (require 'auth-source-sops "./auth-source-sops.el")
 
+(unless (getenv "SOPS_TEST_REAL_YAML")
+
 (ert-deftest auth-source-sops-incremental-extraction-test ()
   "Verify that incremental parsing uses sops --extract."
   (let ((extract-calls 0)
@@ -142,5 +144,6 @@
           (should (= (length results) 1))
           (should (equal (funcall (plist-get (car results) :secret)) "json-val1"))
           (should (= extract-calls 1)))))))
+)
 
 (provide 'incremental-test)
