@@ -4,6 +4,7 @@
 ;; Version: 1.0.0
 ;; Created: 22 Jun 2025
 ;; URL: https://github.com/inkpot-monkey/auth-source-sops
+;; Keywords: comm, tools, system
 ;; Package-Requires: ((emacs "28.1") (yaml "0.5.1"))
 
 ;;; Commentary:
@@ -147,6 +148,7 @@
                          :name "sops-extract"
                          :buffer output-buffer
                          :stderr error-buffer
+                         :connection-type 'pipe
                          :command (list auth-source-sops-executable "decrypt"
                                         "--extract" (format "[\"%s\"]" key)
                                         auth-source-sops-file)
@@ -160,7 +162,10 @@
               (let ((start-time (float-time)))
                 (while (not proc-done)
                   (accept-process-output proc 0.1)
-                  (when (> (- (float-time) start-time) 10.0)
+                  (unless (process-live-p proc)
+                    (setq exit-code (process-exit-status proc))
+                    (setq proc-done t))
+                  (when (> (- (float-time) start-time) 20.0)
                     (delete-process proc)
                     (error "Sops extract timed out for %s" key))))
               (if (zerop exit-code)
