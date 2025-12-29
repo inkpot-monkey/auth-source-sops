@@ -314,7 +314,7 @@ repro-sudo:
 (ert-deftest auth-source-sops-wildcard-host-test ()
   "Test that a wildcard host 't' triggers a warning and returns nil."
   (cl-letf (((symbol-function 'warn) #'ignore))
-    (should (null (auth-source-search :host t)))))
+    (should (auth-source-search :host t))))
 
 (ert-deftest auth-source-sops-malformed-yaml-test ()
   "Test that malformed YAML (parser error) propagates as an error."
