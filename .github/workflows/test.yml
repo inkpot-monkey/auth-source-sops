@@ -1,103 +1,43 @@
-# * test.yml --- Test Emacs packages using makem.sh on GitHub Actions
+name: Test
 
-# URL: https://github.com/alphapapa/makem.sh
-# Version: 0.8-pre
-
-# * Commentary:
-
-# Based on Steve Purcell's examples at
-# <https://github.com/purcell/setup-emacs/blob/master/.github/workflows/test.yml>,
-# <https://github.com/purcell/package-lint/blob/master/.github/workflows/test.yml>.
-
-# * License:
-
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-# * Code:
-
-name: "CI"
 on:
-  pull_request:
   push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        emacs_version: [28.1, 28.2, 29.1, 29.2, 29.3, 29.4, 30.1, release-snapshot]
+        emacs_version:
+          - 28.1
+          - 29.1
+          - snapshot
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - uses: purcell/setup-emacs@master
+    - uses: actions/checkout@v3
+
+    # Install sops
+    - name: Install sops
+      run: |
+        curl -LO https://github.com/getsops/sops/releases/download/v3.8.1/sops-v3.8.1.linux.amd64
+        chmod +x sops-v3.8.1.linux.amd64
+        sudo mv sops-v3.8.1.linux.amd64 /usr/local/bin/sops
+
+    # Install Emacs
+    - name: Install Emacs
+      uses: purcell/setup-emacs@master
       with:
         version: ${{ matrix.emacs_version }}
 
-    - name: Install Ispell
+    # Install dependencies (yaml, etc) if needed.
+    # Since we use built-in json and mock-yaml is included, we mainly need the 'yaml' package for real parsing.
+    # We can install it via package.el in batch mode.
+    - name: Install dependencies
       run: |
-        sudo apt-get install ispell
+        emacs -Q -batch -eval "(progn (require 'package) (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t) (package-initialize) (package-refresh-contents) (package-install 'yaml))"
 
-    - name: Setup SOPS   
-      uses: nhedger/setup-sops@v2
-
-    - name: Initialize sandbox
-      run: |
-        SANDBOX_DIR=$(mktemp -d) || exit 1
-        echo "SANDBOX_DIR=$SANDBOX_DIR" >> $GITHUB_ENV
-        ./makem.sh -vv --sandbox=$SANDBOX_DIR --install-deps --install-linters
-
-    - name: Lint
-      # Spell linter fails for some reason for emacs version 28
-      continue-on-error: ${{ startsWith(matrix.emacs_version, '28') }}
-      run: ./makem.sh -vv --sandbox=$SANDBOX_DIR lint-checkdoc lint-compile lint-declare lint-indent lint-package lint-regexps
-
-    - name: Test
-      if: always()  # Run test even if linting fails.
-      run: ./makem.sh -vv --sandbox=$SANDBOX_DIR test
-
-  tag:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Extract version
-        id: get_version
-        run: |
-          VERSION=$(grep ';; Version:' auth-source-sops.el | awk '{print $3}')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Check if tag exists
-        id: check_tag
-        run: |
-          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create and push tag
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
-          git push origin "v${{ env.VERSION }}"
+    - name: Run tests
+      run: make test

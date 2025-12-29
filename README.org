@@ -109,6 +109,20 @@ All options can be configured via ~M-x customize-group auth-source-sops~.
   - ~:incremental~ (Default): Uses ~sops --extract~ to decrypt only the specific branch of the YAML/JSON structure that matches your host. This is faster for large files and avoids keeping the entire decrypted content in memory.
   - ~:full~: Decrypts the entire file once and performs the search locally in Emacs.
 
+* Development
+
+** Running Tests
+
+This package includes a ~Makefile~ to simplify running tests.
+
+#+begin_src sh
+# Run all tests
+make test
+
+# Clean up compiled files and test artifacts
+make clean
+#+end_src
+
 * License
 
 GPLv3
