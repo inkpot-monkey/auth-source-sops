@@ -334,5 +334,25 @@ repro-sudo:
      (should (equal (funcall (plist-get result :secret)) "99")))))
 
 
+
+(ert-deftest auth-source-sops-configurable-timeout-test ()
+  "Test that the timeout is configurable."
+  (let ((auth-source-sops-process-timeout 0.1))
+    (cl-letf* (((symbol-function 'make-process)
+                (lambda (&rest args) 'mock-hung-proc))
+               ((symbol-function 'process-live-p) (lambda (_) t))
+               ((symbol-function 'process-status) (lambda (_) 'run))
+               ((symbol-function 'process-exit-status) (lambda (_) nil))
+               ((symbol-function 'delete-process) (lambda (_) t))
+               ((symbol-function 'set-process-query-on-exit-flag) (lambda (_ __) t))
+               ((symbol-function 'float-time)
+                (let ((counter 0))
+                  (lambda (&optional _time)
+                    (setq counter (+ counter 0.2)) ;; Advance time faster than timeout
+                    counter)))
+               ((symbol-function 'accept-process-output) (lambda (&rest _) t)))
+      (let ((err (should-error (auth-source-sops-decrypt))))
+        (should (string-match-p "timed out" (cadr err)))))))
+
 (provide 'tests)
 ;;; auth-source-sops-test.el ends here
