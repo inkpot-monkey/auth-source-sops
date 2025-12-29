@@ -1,0 +1,42 @@
+name: Auto Tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'auth-source-sops.el'
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Extract version
+        id: extract_version
+        run: |
+          VERSION=$(grep -m 1 "Version:" auth-source-sops.el | awk '{print $3}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Found version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
+            echo "TAG_EXISTS=true" >> $GITHUB_ENV
+            echo "Tag v${{ env.VERSION }} already exists"
+          else
+            echo "TAG_EXISTS=false" >> $GITHUB_ENV
+            echo "Tag v${{ env.VERSION }} does not exist"
+          fi
+
+      - name: Create Tag
+        if: env.TAG_EXISTS == 'false'
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ env.VERSION }}
+          tag_prefix: v
