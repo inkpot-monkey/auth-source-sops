@@ -32,6 +32,15 @@
   "Path to the sops executable."
   :type 'string)
 
+(defcustom auth-source-sops-process-timeout 20.0
+  "Timeout in seconds for sops process execution."
+  :type 'float)
+
+(defcustom auth-source-sops-error-on-fail t
+  "If non-nil, signal an error when sops fails.
+If nil, return nil (fail gracefully) which allows other auth-sources to be tried."
+  :type 'boolean)
+
 (defcustom auth-source-sops-file "~/.authinfo.sops.yaml"
   "File in which sops-encrypted credentials are stored."
   :type 'file)
@@ -116,7 +125,9 @@
           :sops-index entry-idx
           :backend auth-source-sops-backend)))
 
-(defvar auth-source-sops--raw-cache nil)
+(defvar auth-source-sops--raw-cache nil
+  "Cache for raw (undecrypted) structure of the sops file.
+Format: ((filename . (mod-time . parsed-structure)))")
 
 (defun auth-source-sops--get-raw-structure ()
   "Return the parsed structure of the sops file without full decryption."
@@ -213,13 +224,15 @@
    :source "."
    :type 'sops
    :type 'sops
-   :search-function #'auth-source-sops-search))
+   :search-function #'auth-source-sops-search)
+  "Auth-source backend for sops.")
 
 (defun auth-source-sops-delete (entry)
   "Delete ENTRY from sops file."
   (auth-source-sops--do-delete (list entry) nil nil nil nil))
 
 (defun auth-source-sops-backend-parse (entry)
+  "Parse sops backend entry."
   (when (eq entry 'sops)
     (auth-source-backend-parse-parameters entry auth-source-sops-backend)))
 
