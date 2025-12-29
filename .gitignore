@@ -1,4 +1,6 @@
-*.elc*.log
+*.elc
+*.log
 *.json
 *.yaml
 auth-source-sops-indented.el
+.sandbox/
