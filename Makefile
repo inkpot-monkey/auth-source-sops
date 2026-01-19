@@ -8,7 +8,9 @@ test: test-unit test-protocol
 
 test-unit:
 	@echo "Running unit tests (Mock YAML)..."
-	$(EMACS) -Q -batch -L . -L tests \
+	$(EMACS) -Q -batch \
+		-eval "(progn (require 'package) (package-initialize))" \
+		-L . -L tests \
 		-l tests/tests.el \
 		-l tests/incremental_test.el \
 		-f ert-run-tests-batch-and-exit
@@ -16,7 +18,9 @@ test-unit:
 test-protocol:
 	@echo "Running protocol tests (Real YAML/JSON)..."
 	@export SOPS_TEST_REAL_YAML=1; \
-	$(EMACS) -Q -batch -L . -L tests \
+	$(EMACS) -Q -batch \
+		-eval "(progn (require 'package) (package-initialize))" \
+		-L . -L tests \
 		-l tests/protocol_test.el \
 		-l tests/protocol_yaml_test.el \
 		-l tests/core_compliance_test.el \
