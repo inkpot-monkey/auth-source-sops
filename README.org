@@ -6,7 +6,7 @@ Integrate [[https://getsops.io/][sops]] with Emacs ~auth-source~. This package a
 
 ** Prerequisites
 
-1. *sops binary*: The [[https://getsops.io/][sops]] executable must be installed and available in your ~exec-path~.
+1. *sops binary*: The [[https://getsops.io/][sops]] executable must be installed and available in your ~exec-path~. Tested with **v3.11.0**.
 2. *yaml.el*: Required for parsing decrypted YAML data.
 3. *Emacs 25.1+*: Built-in ~json.el~ is used for JSON support.
 
