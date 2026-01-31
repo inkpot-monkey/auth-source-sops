@@ -5,18 +5,14 @@
 ;; Tests for the SSH-to-Age key derivation feature of auth-source-sops.
 
 ;;; Code:
-(defvar current-dir (file-name-directory (or load-file-name buffer-file-name)))
-
-(require 'ert)
-(require 'cl-lib)
-(require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
+(require 'test-helper)
 
 ;; Test SSH key paths
 (defvar ssh-test-key-private
-  (expand-file-name "ssh_test_key" current-dir))
+  (expand-file-name "ssh_test_key" auth-source-sops-test-dir))
 
 (defvar ssh-test-key-public
-  (expand-file-name "ssh_test_key.pub" current-dir))
+  (expand-file-name "ssh_test_key.pub" auth-source-sops-test-dir))
 
 ;; Expected derived age key (pre-computed for reproducibility)
 (defvar expected-derived-age-key
@@ -64,7 +60,7 @@
 (ert-deftest auth-source-sops-ensure-age-key-file-mode-test ()
   "Test that 'file mode reads from auth-source-sops-age-key file."
   (let ((auth-source-sops-age-key-source 'file)
-        (auth-source-sops-age-key (expand-file-name "age" current-dir))
+        (auth-source-sops-age-key (expand-file-name "age" auth-source-sops-test-dir))
         (process-environment (copy-sequence process-environment)))
     (setenv "SOPS_AGE_KEY" nil)
     (auth-source-sops--ensure-age-key)

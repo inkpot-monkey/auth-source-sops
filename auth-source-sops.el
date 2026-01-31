@@ -262,9 +262,15 @@ Format: ((filename . (mod-time . parsed-structure)))")
   (when (eq entry 'sops)
     (auth-source-backend-parse-parameters entry auth-source-sops-backend)))
 
+(defun auth-source-sops--cleanup (&rest _args)
+  "Clear the sops raw cache."
+  (setq auth-source-sops--raw-cache nil))
+
 (if (boundp 'auth-source-backend-parser-functions)
     (add-hook 'auth-source-backend-parser-functions #'auth-source-sops-backend-parse)
   (advice-add 'auth-source-backend-parse :before-until #'auth-source-sops-backend-parse))
+
+(advice-add 'auth-source-forget+ :after #'auth-source-sops--cleanup)
 
 (defun auth-source-sops-get-string-from-file (file-path)
   (with-temp-buffer

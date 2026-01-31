@@ -1,30 +1,26 @@
 EMACS ?= emacs
 SRC = auth-source-sops.el
-TESTS = tests/tests.el tests/incremental_test.el tests/protocol_yaml_test.el tests/core_compliance_test.el
 
 .PHONY: test clean compile
 
 test: test-unit test-protocol
 
 test-unit:
-	@echo "Running unit tests (Mock YAML)..."
+	@echo "Running unit tests..."
 	$(EMACS) -Q -batch \
 		-eval "(progn (require 'package) (package-initialize))" \
 		-L . -L tests \
-		-l tests/tests.el \
-		-l tests/incremental_test.el \
+		-l tests/unit_tests.el \
 		-l tests/ssh_to_age_test.el \
 		-f ert-run-tests-batch-and-exit
 
 test-protocol:
-	@echo "Running protocol tests (Real YAML/JSON)..."
+	@echo "Running protocol tests..."
 	@export SOPS_TEST_REAL_YAML=1; \
 	$(EMACS) -Q -batch \
 		-eval "(progn (require 'package) (package-initialize))" \
 		-L . -L tests \
-		-l tests/protocol_test.el \
-		-l tests/protocol_yaml_test.el \
-		-l tests/core_compliance_test.el \
+		-l tests/integration_tests.el \
 		-f ert-run-tests-batch-and-exit
 
 clean:
