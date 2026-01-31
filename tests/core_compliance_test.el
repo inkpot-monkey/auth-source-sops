@@ -48,6 +48,7 @@ Adapted from `auth-source-test-searches' in standard `auth-source-tests.el'."
     (unwind-protect
         (let ((auth-source-sops-file temp-sops-file)
               (auth-source-sops-age-key age-key-file)
+              (auth-source-sops-age-key-source 'file)
               (auth-sources '(sops))
               (auth-source-do-cache nil)
               (full-a '(:host "a1" :port "a2" :user "a3" :secret "a4"))

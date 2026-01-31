@@ -21,6 +21,7 @@ Adapted from `auth-source-test-netrc-create-secret'."
     (unwind-protect
         (let ((auth-source-sops-file temp-sops-file)
               (auth-source-sops-age-key age-key-file)
+              (auth-source-sops-age-key-source 'file)
               (auth-sources '(sops))
               (auth-source-sops--raw-cache nil)
               (passwd "standard-test-pass")
@@ -69,6 +70,7 @@ Adapted from `auth-source-test-netrc-create-secret'."
     (unwind-protect
         (let ((auth-source-sops-file temp-sops-file)
               (auth-source-sops-age-key age-key-file)
+              (auth-source-sops-age-key-source 'file)
               (auth-sources '(sops))
               (auth-source-do-cache nil))
           (auth-source-sops-enable)
@@ -112,6 +114,7 @@ Adapted from `auth-source-test-netrc-create-secret'."
     (unwind-protect
         (let ((auth-source-sops-file temp-sops-file)
               (auth-source-sops-age-key age-key-file)
+              (auth-source-sops-age-key-source 'file)
               (auth-sources '(sops))
               (auth-source-do-cache nil))
           (auth-source-sops-enable)

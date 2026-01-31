@@ -24,6 +24,9 @@
 (setq auth-source-sops-age-key
       (expand-file-name "./age" current-dir))
 
+;; Use 'file mode so tests use the age key file
+(setq auth-source-sops-age-key-source 'file)
+
 (auth-source-sops-enable)
 
 ;; Helpers
