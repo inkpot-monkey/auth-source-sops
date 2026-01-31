@@ -114,27 +114,24 @@ Options:
         (entry-port (alist-get 'port entry))
         (entry-secret (or (alist-get 'secret entry)
                           (alist-get 'password entry))))
-    (let ((matched
-           (and
-            all-hosts
-            (cl-some (lambda (h) (auth-source-sops--match-p h host)) all-hosts)
-            (or (null user) (auth-source-sops--match-p entry-user user))
-            (or (null port)
-                (auth-source-sops--match-p (and entry-port (format "%s" entry-port))
-                                            (if (listp port)
-                                                (mapcar (lambda (p) (format "%s" p)) port)
-                                              (format "%s" port))))
-            entry-secret
-            (cl-every (lambda (field)
-                        (let ((sym-field (if (keywordp field)
-                                             (intern (substring (symbol-name field) 1))
-                                           field)))
-                          (if (eq sym-field 'secret)
-                              entry-secret
-                            (alist-get sym-field entry))))
-                      require))))
-      (message "DEBUG: match all-hosts=%S host=%S -> %S" all-hosts host matched)
-      matched)))
+    (and
+     all-hosts
+     (cl-some (lambda (h) (auth-source-sops--match-p h host)) all-hosts)
+     (or (null user) (auth-source-sops--match-p entry-user user))
+     (or (null port)
+         (auth-source-sops--match-p (and entry-port (format "%s" entry-port))
+                                     (if (listp port)
+                                         (mapcar (lambda (p) (format "%s" p)) port)
+                                       (format "%s" port))))
+     entry-secret
+     (cl-every (lambda (field)
+                 (let ((sym-field (if (keywordp field)
+                                      (intern (substring (symbol-name field) 1))
+                                    field)))
+                   (if (eq sym-field 'secret)
+                       entry-secret
+                     (alist-get sym-field entry))))
+               require))))
 
 (defun auth-source-sops--build-result (entry user port)
   "Build a properly formatted auth-source result from normalized ENTRY."
