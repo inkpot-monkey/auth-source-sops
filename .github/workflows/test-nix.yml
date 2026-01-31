@@ -1,0 +1,31 @@
+name: Test (Nix)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        emacs:
+          - emacs-28-1
+          - emacs-29-1
+          - emacs-29-4
+          - emacs-snapshot
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Nix
+      uses: DeterminateSystems/nix-installer-action@main
+
+    - name: Setup Nix cache
+      uses: DeterminateSystems/magic-nix-cache-action@main
+
+    - name: Run tests for ${{ matrix.emacs }}
+      run: nix build .#checks.x86_64-linux.${{ matrix.emacs }} -L
