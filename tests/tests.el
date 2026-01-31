@@ -9,9 +9,9 @@
 
 (require 'ert)
 (require 'cl-lib)
-(require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
 (require 'mock-yaml (expand-file-name "mock-yaml.el" current-dir))
 (defalias 'yaml-parse-string 'mock-yaml-parse-string)
+(require 'auth-source-sops (expand-file-name "../auth-source-sops.el" current-dir))
 
 (setq auth-source-sops-search-method :full)
 

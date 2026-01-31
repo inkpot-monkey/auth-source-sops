@@ -63,15 +63,6 @@
             cp -r $src/* .
             chmod -R +w .
             
-            # Install yaml.el for real YAML parsing
-            ${emacs}/bin/emacs -Q -batch \
-              -eval "(progn 
-                      (require 'package) 
-                      (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t) 
-                      (package-initialize) 
-                      (package-refresh-contents) 
-                      (package-install 'yaml))" 2>/dev/null || true
-            
             echo "Running unit tests with ${name}..."
             ${emacs}/bin/emacs -Q -batch \
               -eval "(progn (require 'package) (package-initialize))" \
@@ -82,10 +73,10 @@
               -f ert-run-tests-batch-and-exit
             
             echo "Running protocol tests with ${name}..."
-            export SOPS_TEST_REAL_YAML=1
             ${emacs}/bin/emacs -Q -batch \
               -eval "(progn (require 'package) (package-initialize))" \
               -L . -L tests \
+              -l tests/mock-yaml.el \
               -l tests/protocol_test.el \
               -l tests/protocol_yaml_test.el \
               -l tests/core_compliance_test.el \
