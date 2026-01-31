@@ -107,16 +107,17 @@ Options:
 
 (defun auth-source-sops--entry-matches-criteria-p (entry host user port require)
   "Check if a normalized ENTRY matches all search criteria."
-  (let ((entry-host (or (alist-get 'host entry)
-                        (alist-get 'machine entry)))
+  (let ((all-hosts (cl-loop for item in entry
+                            when (memq (car item) '(host machine))
+                            collect (cdr item)))
         (entry-user (alist-get 'user entry))
         (entry-port (alist-get 'port entry))
         (entry-secret (or (alist-get 'secret entry)
                           (alist-get 'password entry))))
     (let ((matched
            (and
-            entry-host
-            (auth-source-sops--match-p entry-host host)
+            all-hosts
+            (cl-some (lambda (h) (auth-source-sops--match-p h host)) all-hosts)
             (or (null user) (auth-source-sops--match-p entry-user user))
             (or (null port)
                 (auth-source-sops--match-p (and entry-port (format "%s" entry-port))
@@ -132,7 +133,7 @@ Options:
                               entry-secret
                             (alist-get sym-field entry))))
                       require))))
-      (message "DEBUG: match entry-host=%S host=%S -> %S" entry-host host matched)
+      (message "DEBUG: match all-hosts=%S host=%S -> %S" all-hosts host matched)
       matched)))
 
 (defun auth-source-sops--build-result (entry user port)
