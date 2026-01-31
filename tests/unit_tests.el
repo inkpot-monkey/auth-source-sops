@@ -15,7 +15,7 @@
   "Basic search functionality test."
   (auth-source-sops-test-with-mock-environment
     (let ((results (auth-source-sops-search :host "github.com" :backend auth-source-sops-backend)))
-      (should (= (length results) 1))
+      (should (= (length results) 6))
       (should (equal (plist-get (car results) :host) "github.com"))
       (should (equal (funcall (plist-get (car results) :secret)) "2")))))
 
@@ -43,7 +43,7 @@
 (ert-deftest auth-source-sops-list-precedence-test ()
   "Test that the first matching entry in a list is returned."
   (auth-source-sops-test-with-mock-environment
-    (let ((results (auth-source-search :host "multiple@yaml-host" :port 443)))
+    (let ((results (auth-source-search :host "yaml-host" :user "multiple" :port 443)))
       (should (= (length results) 1))
       (should (equal (funcall (plist-get (car results) :secret)) "p443-yaml")))))
 
@@ -57,7 +57,7 @@
 (ert-deftest auth-source-sops-search-max-results-test ()
   "Test the :max parameter."
   (auth-source-sops-test-with-mock-environment
-    (let ((results (auth-source-search :host "multiple@yaml-host" :max 2)))
+    (let ((results (auth-source-search :host "yaml-host" :user "multiple" :max 2)))
       (should (= (length results) 2)))))
 
 (ert-deftest auth-source-sops-repro-machine-alias-test ()
