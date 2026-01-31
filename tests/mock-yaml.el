@@ -1,5 +1,4 @@
 (provide 'mock-yaml)
-(provide 'yaml)
 
 (defun mock-yaml-parse-string (string &rest _args)
   "Mock yaml-parse-string for testing."
