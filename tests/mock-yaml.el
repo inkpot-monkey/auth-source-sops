@@ -34,6 +34,8 @@
       (machine-yaml-alias . [ ((machine . "real-host.yaml") (user . "admin") (secret . "admin-secret-yaml")) ])
       (multiple@yaml-host . [ ((port . 80) (secret . "p80-yaml"))
                               ((port . 443) (secret . "p443-yaml")) ])
+      (repro-machine . [ ((machine . "machine.example.com") (password . "secure")) ])
+      (repro-sudo . [ ((host . "sudo-host") (port . "sudo") (user . "root") (password . "sudo-password")) ])
       (me@email.com@complex-host:99 . "99")
       (me@email.com@complex-host:123 . "99")))))
 
