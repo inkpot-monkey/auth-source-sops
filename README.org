@@ -103,11 +103,37 @@ All options can be configured via ~M-x customize-group auth-source-sops~.
   - Default: ~"sops"~
 - ~auth-source-sops-file~ :: The path to your encrypted credentials file.
   - Default: ~"~/.authinfo.sops.yaml"~
-- ~auth-source-sops-age-key~ :: Optional path to a file containing your `age` private key. If set, this package will automatically set the ~SOPS_AGE_KEY~ environment variable during decryption.
+- ~auth-source-sops-age-key~ :: Path to a file containing your `age` private key. Used when ~auth-source-sops-age-key-source~ is set to ~'file~.
   - Default: ~nil~
+- ~auth-source-sops-age-key-source~ :: Where to obtain the Age private key. Options:
+  - ~'environment~ (Default): Use existing ~SOPS_AGE_KEY~ environment variable.
+  - ~'file~: Read from ~auth-source-sops-age-key~ file.
+  - ~'ssh~: Derive from SSH key using ~ssh-to-age~.
+- ~auth-source-sops-ssh-private-key~ :: Path to SSH private key when using ~'ssh~ source.
+  - Default: ~"~/.ssh/id_ed25519"~
+- ~auth-source-sops-ssh-to-age-executable~ :: Path to the ~ssh-to-age~ executable.
+  - Default: ~"ssh-to-age"~
 - ~auth-source-sops-search-method~ :: The strategy used to query the encrypted file.
   - ~:incremental~ (Default): Uses ~sops --extract~ to decrypt only the specific branch of the YAML/JSON structure that matches your host. This is faster for large files and avoids keeping the entire decrypted content in memory.
   - ~:full~: Decrypts the entire file once and performs the search locally in Emacs.
+
+*** Using SSH Keys (ssh-to-age)
+
+If you use SSH keys and don't want to manage separate age keys, you can configure ~auth-source-sops~ to automatically derive the age key from your SSH key:
+
+#+begin_src elisp
+(use-package auth-source-sops
+  :config
+  (setq auth-source-sops-file "~/.authinfo.sops.yaml")
+  (setq auth-source-sops-age-key-source 'ssh)
+  ;; Optional: customize SSH key path (default is ~/.ssh/id_ed25519)
+  ;; (setq auth-source-sops-ssh-private-key "~/.ssh/my-custom-key")
+  (auth-source-sops-enable))
+#+end_src
+
+This requires the [[https://github.com/Mic92/ssh-to-age][ssh-to-age]] tool to be installed. The age key is derived lazily on the first decrypt operation and cached for the duration of the Emacs session.
+
+If you update your SSH key, call ~M-x auth-source-sops-clear-ssh-cache~ to re-derive the age key.
 
 * Development
 
