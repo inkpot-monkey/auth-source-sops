@@ -368,7 +368,7 @@ Call this if you've updated your SSH key and need to re-derive."
 
 (defun auth-source-sops-parse (file output)
   (cond ((string-suffix-p ".yaml" file)
-         (yaml-parse-string output :object-type 'alist :object-key-type 'string))
+         (yaml-parse-string output :object-type 'alist :object-key-type 'symbol))
         ((or (string-suffix-p ".json" file)
              (string-suffix-p ".sops" file))
          (json-parse-string output :object-type 'alist :array-type 'array))
