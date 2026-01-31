@@ -38,7 +38,8 @@
 
 (defcustom auth-source-sops-error-on-fail t
   "If non-nil, signal an error when sops fails.
-If nil, return nil (fail gracefully) which allows other auth-sources to be tried."
+If nil, return nil (fail gracefully) which allows other
+auth-sources to be tried."
   :type 'boolean)
 
 (defcustom auth-source-sops-file "~/.authinfo.sops.yaml"
@@ -131,6 +132,8 @@ Options:
 
 (defun auth-source-sops--build-result (entry user port)
   "Build a properly formatted auth-source result from normalized ENTRY."
+  (declare-function auth-source-backend "auth-source")
+  (defvar auth-source-sops-backend)
   (let* ((entry-host (cdr (assoc 'host entry)))
          (entry-user (cdr (assoc 'user entry)))
          (entry-port (cdr (assoc 'port entry)))
