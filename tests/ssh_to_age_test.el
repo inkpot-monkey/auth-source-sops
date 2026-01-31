@@ -24,9 +24,15 @@
 
 ;;; Tests for customization variables
 
-(ert-deftest auth-source-sops-age-key-source-default-test ()
-  "Test that auth-source-sops-age-key-source defaults to 'environment."
-  (should (eq (default-value 'auth-source-sops-age-key-source) 'environment)))
+(ert-deftest auth-source-sops-age-key-source-custom-type-test ()
+  "Test that auth-source-sops-age-key-source is a defcustom with correct type."
+  (should (custom-variable-p 'auth-source-sops-age-key-source))
+  (let ((type (get 'auth-source-sops-age-key-source 'custom-type)))
+    (should (eq (car type) 'choice))
+    ;; Verify it includes environment, file, and ssh options
+    (should (member '(const :tag "Environment variable" environment) (cdr type)))
+    (should (member '(const :tag "File" file) (cdr type)))
+    (should (member '(const :tag "Derive from SSH key" ssh) (cdr type)))))
 
 (ert-deftest auth-source-sops-ssh-private-key-default-test ()
   "Test that auth-source-sops-ssh-private-key defaults to ~/.ssh/id_ed25519."

@@ -13,6 +13,7 @@ test-unit:
 		-L . -L tests \
 		-l tests/tests.el \
 		-l tests/incremental_test.el \
+		-l tests/ssh_to_age_test.el \
 		-f ert-run-tests-batch-and-exit
 
 test-protocol:
