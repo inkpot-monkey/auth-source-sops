@@ -20,6 +20,8 @@
           emacs-28-1 = nix-emacs-ci.packages.${system}.emacs-28-1;
           emacs-29-1 = nix-emacs-ci.packages.${system}.emacs-29-1;
           emacs-29-4 = nix-emacs-ci.packages.${system}.emacs-29-4;
+          emacs-30-1 = nix-emacs-ci.packages.${system}.emacs-30-1;
+          emacs-30-2 = nix-emacs-ci.packages.${system}.emacs-30-2;
           emacs-snapshot = nix-emacs-ci.packages.${system}.emacs-snapshot;
         };
 
