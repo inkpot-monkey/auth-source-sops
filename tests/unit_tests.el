@@ -8,8 +8,8 @@
   "Test YAML parsing of decrypted content."
   (auth-source-sops-test-with-mock-environment
     (let* ((parsed (auth-source-sops-parse "file.yaml" "mocked-content")))
-      (should (equal (cdr (assoc "github.com" parsed)) "2"))
-      (should (equal (cdr (assoc "github" parsed)) "1")))))
+      (should (equal (cdr (assoc 'github.com parsed)) "2"))
+      (should (equal (cdr (assoc 'github parsed)) "1")))))
 
 (ert-deftest auth-source-sops-search-basic-test ()
   "Basic search functionality test."

@@ -4,13 +4,10 @@
   "Mock yaml-parse-string for testing."
   (cond
    ((string-match-p "repro-machine" string)
-    (message "DEBUG: mock-yaml-parse-string matched repro-machine")
-    '(("repro-machine" . [ (("machine" . "machine.example.com") ("password" . "secure")) ])))
+    '((repro-machine . [ ((machine . "machine.example.com") (password . "secure")) ])))
    ((string-match-p "repro-sudo" string)
-    (message "DEBUG: mock-yaml-parse-string matched repro-sudo")
-    '(("repro-sudo" . [ (("host" . "sudo-host") ("port" . "sudo") ("user" . "root") ("password" . "sudo-password")) ])))
+    '((repro-sudo . [ ((host . "sudo-host") (port . "sudo") (user . "root") (password . "sudo-password")) ])))
    ((string-match-p "malformed" string)
-    (message "DEBUG: mock-yaml-parse-string matched malformed")
     (error "YAML parsing error"))
    ((string-equal "user: apikey\nsecret: 6" string)
     '((user . "apikey") (secret . "6")))
