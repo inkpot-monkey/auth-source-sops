@@ -49,6 +49,27 @@ If nil, return nil (fail gracefully) which allows other auth-sources to be tried
   "File containing the SOPS_AGE_KEY."
   :type '(choice (const :tag "None" nil) file))
 
+(defcustom auth-source-sops-age-key-source 'environment
+  "Where to obtain the Age private key.
+Options:
+  - `environment': Use existing SOPS_AGE_KEY env var (current behavior).
+  - `file': Read from `auth-source-sops-age-key'.
+  - `ssh': Derive from SSH key using ssh-to-age."
+  :type '(choice (const :tag "Environment variable" environment)
+                 (const :tag "File" file)
+                 (const :tag "Derive from SSH key" ssh))
+  :group 'auth-source-sops)
+
+(defcustom auth-source-sops-ssh-private-key "~/.ssh/id_ed25519"
+  "Path to SSH private key when using `auth-source-sops-age-key-source' = `ssh'."
+  :type 'file
+  :group 'auth-source-sops)
+
+(defcustom auth-source-sops-ssh-to-age-executable "ssh-to-age"
+  "Path to the ssh-to-age executable."
+  :type 'string
+  :group 'auth-source-sops)
+
 (defcustom auth-source-sops-search-method :incremental
   "Method used to search for credentials in the sops file."
   :type '(choice (const :tag "Incremental Search" :incremental)
@@ -129,6 +150,9 @@ If nil, return nil (fail gracefully) which allows other auth-sources to be tried
   "Cache for raw (undecrypted) structure of the sops file.
 Format: ((filename . (mod-time . parsed-structure)))")
 
+(defvar auth-source-sops--derived-age-key nil
+  "Cached Age key derived from SSH. Avoids repeated shell calls.")
+
 (defun auth-source-sops--get-raw-structure ()
   "Return the parsed structure of the sops file without full decryption."
   (let* ((filename (expand-file-name auth-source-sops-file))
@@ -153,8 +177,7 @@ Format: ((filename . (mod-time . parsed-structure)))")
     (let ((process-environment (copy-sequence process-environment)))
       (unwind-protect
           (progn
-            (when auth-source-sops-age-key
-              (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
+            (auth-source-sops--ensure-age-key)
             (let ((proc (make-process
                          :name "sops-extract"
                          :buffer output-buffer
@@ -253,15 +276,55 @@ Format: ((filename . (mod-time . parsed-structure)))")
     (when (and modes (> (logand modes #o077) 0))
       (warn "File %s has insecure permissions %o. Should be 0600." file modes))))
 
+(defun auth-source-sops--ensure-age-key ()
+  "Ensure SOPS_AGE_KEY is available based on `auth-source-sops-age-key-source'.
+Sets the environment variable as appropriate."
+  (pcase auth-source-sops-age-key-source
+    ('environment
+     ;; Do nothing - assume SOPS_AGE_KEY is already set in environment
+     ;; or will be provided by other means (gpg-agent, etc.)
+     nil)
+    ('file
+     (if auth-source-sops-age-key
+         (let ((expanded (expand-file-name auth-source-sops-age-key)))
+           (if (file-exists-p expanded)
+               (progn
+                 (auth-source-sops--check-permissions expanded)
+                 (setenv "SOPS_AGE_KEY" (string-trim (auth-source-sops-get-string-from-file expanded))))
+             (user-error "Age key file not found: %s" expanded)))
+       (user-error "auth-source-sops-age-key must be set when using 'file source")))
+    ('ssh
+     (unless auth-source-sops--derived-age-key
+       (let ((ssh-key (expand-file-name auth-source-sops-ssh-private-key)))
+         (unless (executable-find auth-source-sops-ssh-to-age-executable)
+           (user-error "ssh-to-age not found. Install it or use a different key source"))
+         (unless (file-exists-p ssh-key)
+           (user-error "SSH private key not found: %s" ssh-key))
+         (let ((output (string-trim
+                        (shell-command-to-string
+                         (format "%s -private-key -i %s"
+                                 (shell-quote-argument auth-source-sops-ssh-to-age-executable)
+                                 (shell-quote-argument ssh-key))))))
+           (if (string-prefix-p "AGE-SECRET-KEY-" output)
+               (setq auth-source-sops--derived-age-key output)
+             (user-error "Failed to derive Age key from SSH: %s" output)))))
+     (setenv "SOPS_AGE_KEY" auth-source-sops--derived-age-key))
+    (_
+     (user-error "Unknown auth-source-sops-age-key-source: %s" auth-source-sops-age-key-source))))
+
+(defun auth-source-sops-clear-ssh-cache ()
+  "Clear the cached SSH-derived Age key.
+Call this if you've updated your SSH key and need to re-derive."
+  (interactive)
+  (setq auth-source-sops--derived-age-key nil)
+  (message "SSH-derived Age key cache cleared"))
+
 (defun auth-source-sops-decrypt ()
   (let ((process-environment (copy-sequence process-environment)))
     (when (file-exists-p auth-source-sops-file)
       (auth-source-sops--check-permissions auth-source-sops-file))
+    (auth-source-sops--ensure-age-key)
     (with-temp-buffer
-      (when auth-source-sops-age-key
-        (when (file-exists-p auth-source-sops-age-key)
-          (auth-source-sops--check-permissions auth-source-sops-age-key))
-        (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
       (let ((output-buffer (generate-new-buffer " *sops-output*"))
             (error-buffer (generate-new-buffer " *sops-error*"))
             (exit-code nil)
@@ -405,8 +468,7 @@ Keys like `machine' and `password' are normalized."
                     entry))
          (exit-code 0))
 
-      (when auth-source-sops-age-key
-        (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
+      (auth-source-sops--ensure-age-key)
 
       ;; 1. Unset the key first to ensure a clean state and type
       (when existing-pair
@@ -467,8 +529,7 @@ Keys like `machine' and `password' are normalized."
   (let ((exit-code nil))
     (let ((process-environment (copy-sequence process-environment)))
       (with-temp-buffer
-        (when auth-source-sops-age-key
-          (setenv "SOPS_AGE_KEY" (auth-source-sops-get-string-from-file auth-source-sops-age-key)))
+        (auth-source-sops--ensure-age-key)
         (setq exit-code
               (call-process auth-source-sops-executable nil (list t t) nil
                             "unset" auth-source-sops-file (format "[\"%s\"]" key)))
