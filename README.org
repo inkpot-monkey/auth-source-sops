@@ -137,13 +137,35 @@ If you update your SSH key, call ~M-x auth-source-sops-clear-ssh-cache~ to re-de
 
 * Development
 
-** Running Tests
+** Using Nix
 
-This package includes a ~Makefile~ to simplify running tests.
+This project uses Nix for reproducible development and CI. To enter a development environment with all dependencies (including ~sops~ and ~ssh-to-age~):
 
 #+begin_src sh
+nix develop
+# Then run:
+run-tests
+#+end_src
+
+To run the CI checks for all supported Emacs versions:
+
+#+begin_src sh
+nix flake check -L
+#+end_src
+
+** Using Makefile
+
+Alternatively, you can use the provided ~Makefile~ if you have the dependencies installed on your system.
+
+#+begin_src sh
+# Compile the package
+make compile
+
 # Run all tests
 make test
+
+# Lint the code (requires package-lint)
+make lint
 
 # Clean up compiled files and test artifacts
 make clean

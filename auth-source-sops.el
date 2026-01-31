@@ -1,7 +1,7 @@
 ;;; auth-source-sops.el --- Integrate auth-source with sops -*- lexical-binding: t -*-
 
 ;; Author: Inkpot Monkey <inkpot@palebluebytes.space>,
-;; Version: 1.1.1
+;; Version: 1.2.0
 ;; Created: 22 Jun 2025
 ;; URL: https://github.com/inkpot-monkey/auth-source-sops
 ;; Keywords: comm, tools, system
