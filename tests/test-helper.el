@@ -12,8 +12,6 @@
 
 ;; Setup mock-yaml for unit tests
 (require 'mock-yaml (expand-file-name "mock-yaml.el" auth-source-sops-test-dir))
-;; Always override for unit tests to ensure predictable results even if real yaml.el is present
-(defalias 'yaml-parse-string 'mock-yaml-parse-string)
 
 (defmacro auth-source-sops-test-with-temp-file (var-name suffix &rest body)
   "Create a temp file, assign path to VAR-NAME, run BODY, and delete file."
@@ -27,11 +25,10 @@
 (defmacro auth-source-sops-test-with-mock-environment (&rest body)
   "Set up a isolated environment for auth-source-sops tests."
   (declare (indent 0))
-  `(let ((temp-file (make-temp-file "auth-sops-unit-test" nil ".yaml"))
-         (old-decrypt (and (fboundp 'auth-source-sops-decrypt) (symbol-function 'auth-source-sops-decrypt))))
-     (unwind-protect
-         (progn
-           (fset 'auth-source-sops-decrypt (lambda () "mocked-content"))
+  `(let ((temp-file (make-temp-file "auth-sops-unit-test" nil ".yaml")))
+     (cl-letf (((symbol-function 'auth-source-sops-decrypt) (lambda () "mocked-content"))
+               ((symbol-function 'yaml-parse-string) #'mock-yaml-parse-string))
+       (unwind-protect
            (let ((auth-source-sops-file temp-file)
                  (auth-source-sops-age-key-source 'environment)
                  (auth-source-sops-search-method :full)
@@ -41,9 +38,9 @@
                  (auth-source-sops--derived-age-key nil)
                  (process-environment (copy-sequence process-environment)))
              (auth-source-sops-enable)
-             ,@body))
-       (when old-decrypt (fset 'auth-source-sops-decrypt old-decrypt))
-       (when (file-exists-p temp-file) (delete-file temp-file)))))
+             ,@body)
+         (when (file-exists-p temp-file) (delete-file temp-file))))))
+
 
 (defun auth-source-sops-test-get-age-key ()
   "Get the test age key from the environment or file."
