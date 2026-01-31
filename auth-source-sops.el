@@ -102,11 +102,13 @@ Options:
    ((listp criteria) (member val criteria))
    (t (and (stringp val)
            (stringp criteria)
-           (not (not (string-match-p criteria val)))))))
+           (or (string-equal val criteria)
+               (not (not (string-match-p (regexp-quote criteria) val))))))))
 
 (defun auth-source-sops--entry-matches-criteria-p (entry host user port require)
   "Check if a normalized ENTRY matches all search criteria."
-  (let ((entry-host (alist-get 'host entry))
+  (let ((entry-host (or (alist-get 'host entry)
+                        (alist-get 'machine entry)))
         (entry-user (alist-get 'user entry))
         (entry-port (alist-get 'port entry))
         (entry-secret (or (alist-get 'secret entry)
